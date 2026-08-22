@@ -336,12 +336,12 @@ Panel {
     var id = root.removeQueue.shift()
     root.removingPlugin = true
     root.removeSummary = "Removing " + id + "…"
-    removeProcess.command = ["bash", "-c", "omarchy plugin remove \"$0\" --yes", id]
+    removeProcess.command = ["bash", "-c", "omarchy plugin remove \"$0\" --yes 2>&1 | { head -c 8192; cat >/dev/null; }", id]
     removeProcess.running = true
   }
 
   function onRemoveFinished(exitCode) {
-    var err = String(removeStderr.text || "").trim()
+    var err = String(removeStdout.text || "").trim()
     if (exitCode !== 0) {
       root.removingPlugin = false
       root.removeQueue = []
@@ -360,12 +360,12 @@ Panel {
     root.reposScanning = true
     var script = ""
       + "dirs=\"$0\"\n"
-      + "for d in \"$dirs\"/*/; do\n"
+      + "{ for d in \"$dirs\"/*/; do\n"
       + "  [ -d \"$d/.git\" ] || continue\n"
       + "  id=$(basename \"$d\")\n"
       + "  url=$(git -C \"$d\" remote get-url origin 2>/dev/null)\n"
       + "  [ -n \"$url\" ] && echo \"$id|$url\"\n"
-      + "done"
+      + "done; } | { head -c 8192; cat >/dev/null; }"
     repoScanProcess.command = ["bash", "-c", script, dir]
     repoScanProcess.running = true
   }
@@ -414,7 +414,7 @@ Panel {
     root.checkWatchdog.restart()
     var script = ""
       + "dirs=\"$0\"\n"
-      + "for d in \"$dirs\"/*/; do\n"
+      + "{ for d in \"$dirs\"/*/; do\n"
       + "  [ -d \"$d/.git\" ] || continue\n"
       + "  id=$(basename \"$d\")\n"
       + "  echo \"CHECK|$id\"\n"
@@ -426,7 +426,7 @@ Panel {
       + "  else\n"
       + "    echo \"UPDATE|$id\"\n"
       + "  fi\n"
-      + "done"
+      + "done; } | { head -c 65536; cat >/dev/null; }"
     updateCheckProcess.command = ["bash", "-c", script, dir]
     console.log("checkUpdates command set, running...")
     updateCheckProcess.running = true
@@ -489,7 +489,7 @@ Panel {
     if (root.updatingId !== "") return
     root.updatingId = id
     root.updateSummary = "Updating " + id + "…"
-    updateProcess.command = ["bash", "-c", "omarchy plugin update \"$0\" --yes", id]
+    updateProcess.command = ["bash", "-c", "omarchy plugin update \"$0\" --yes 2>&1 | { head -c 8192; cat >/dev/null; }", id]
     updateProcess.running = true
   }
 
@@ -502,7 +502,7 @@ Panel {
     if (pending === 0) return
     root.updatingAll = true
     root.updateSummary = "Updating all " + pending + "…"
-    updateAllProcess.command = ["bash", "-c", "omarchy plugin update --yes"]
+    updateAllProcess.command = ["bash", "-c", "omarchy plugin update --yes 2>&1 | { head -c 8192; cat >/dev/null; }"]
     updateAllProcess.running = true
   }
 
@@ -511,7 +511,7 @@ Panel {
     if (exitCode === 0)
       root.updateSummary = "All updates applied"
     else {
-      var err = String(updateStderr.text || "").trim()
+      var err = String(updateStdout.text || "").trim()
       root.updateSummary = "Bulk update failed" + (err ? ": " + err : "")
     }
     root.refreshPlugins()
@@ -525,7 +525,7 @@ Panel {
     if (exitCode === 0)
       root.updateSummary = "Updated " + id
     else {
-      var err = String(updateStderr.text || "").trim()
+      var err = String(updateStdout.text || "").trim()
       root.updateSummary = "Update of " + id + " failed" + (err ? ": " + err : "")
     }
     root.refreshPlugins()
@@ -580,7 +580,6 @@ Panel {
       root.onUpdateFinished(exitCode)
     }
     stdout: StdioCollector { id: updateStdout; waitForEnd: true }
-    stderr: StdioCollector { id: updateStderr; waitForEnd: true }
   }
 
   property Process updateAllProcess: Process {
@@ -604,7 +603,6 @@ Panel {
       root.onRemoveFinished(exitCode)
     }
     stdout: StdioCollector { id: removeStdout; waitForEnd: true }
-    stderr: StdioCollector { id: removeStderr; waitForEnd: true }
   }
 
   // Launches the detached shell restart. The shell dies mid-command, so the
@@ -1043,6 +1041,7 @@ Panel {
 
             Label {
               text: root.headerSummary
+              textFormat: Text.PlainText
               color: Qt.darker(root.contentForeground, 1.5)
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.bodySmall
