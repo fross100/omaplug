@@ -1358,13 +1358,14 @@ Panel {
                   spacing: Style.space(8)
 
                   Label {
+                    id: pluginNameLabel
                     text: modelData.name
                     textFormat: Text.PlainText
                     color: root.contentForeground
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
-                    Layout.fillWidth: true
+                    Layout.maximumWidth: (pluginList.width - Style.space(160)) * 0.7
                     elide: Label.ElideRight
                   }
 
