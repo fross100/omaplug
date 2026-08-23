@@ -1510,10 +1510,14 @@ Panel {
                   font.pixelSize: Style.font.caption
                   font.underline: marketLinkHover.hovered
 
-                  MouseArea {
+                  HoverHandler {
                     id: marketLinkHover
+                    cursorShape: Qt.PointingHandCursor
+                  }
+
+                  MouseArea {
+                    id: marketLinkClick
                     anchors.fill: parent
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.openMarketplacePage(modelData.id)
                   }
