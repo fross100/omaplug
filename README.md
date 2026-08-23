@@ -15,6 +15,8 @@ Omaplug is listed on the marketplace: [omarchyplugins.com/plugin.html?id=omaplug
 
 ## Screenshots
 
+![Omaplug preview](preview.png)
+
 <table>
   <tr>
     <td align="center"><img src="preview_main.png" alt="Main plugin list" width="280"/></td>
@@ -27,14 +29,14 @@ Omaplug is listed on the marketplace: [omarchyplugins.com/plugin.html?id=omaplug
     <td align="center">Installing a plugin</td>
   </tr>
   <tr>
-    <td align="center"><img src="preview_filter.png" alt="Filtering and searching" width="280"/></td>
+    <td align="center"><img src="preview_filter.png" alt="Scope filter" width="280"/></td>
+    <td align="center"><img src="preview_filter_2.png" alt="Type filter" width="280"/></td>
     <td align="center"><img src="preview_action.png" alt="Row action menu" width="280"/></td>
-    <td align="center"></td>
   </tr>
   <tr>
-    <td align="center">Filtering and searching</td>
+    <td align="center">Scope filter</td>
+    <td align="center">Type filter</td>
     <td align="center">Row action menu</td>
-    <td align="center"></td>
   </tr>
 </table>
 
