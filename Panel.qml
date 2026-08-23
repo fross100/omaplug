@@ -44,6 +44,30 @@ Panel {
   property var pluginRepos: ({})
   property bool reposScanning: false
 
+  // Marketplace listing info keyed by plugin id: { verified: bool }. Fetched
+  // from the public catalog so rows can show a verification badge and a
+  // "View on marketplace" link for listed plugins.
+  property var marketplaceMap: ({})
+  property bool marketplaceFetching: false
+  property string marketplaceFetchedAt: ""
+
+  function marketplaceEntry(id) {
+    if (modelData_firstParty(id)) return null
+    return root.marketplaceMap[String(id)] || null
+  }
+  function modelData_firstParty(id) {
+    var reg = root.registry
+    var m = reg && reg.installedPlugins ? reg.installedPlugins[id] : null
+    return m ? m.__isFirstParty === true : false
+  }
+  function marketplaceUrlFor(id) {
+    return "https://omarchyplugins.com/plugin.html?id=" + encodeURIComponent(String(id))
+  }
+  function openMarketplacePage(id) {
+    var e = root.marketplaceEntry(id)
+    if (e) Qt.openUrlExternally(root.marketplaceUrlFor(id))
+  }
+
   property string searchText: ""
   property int filterMode: 0 // 0 all, 1 omarchy, 2 third-party, 4 adna
 
@@ -549,6 +573,46 @@ Panel {
     Qt.callLater(function() { root.checkUpdates() })
   }
 
+  // Fetches the public marketplace catalog (capped at 2 MB like every other
+  // retained output) and builds the id -> {verified} map.
+  function fetchMarketplace() {
+    if (root.marketplaceFetching) return
+    root.marketplaceFetching = true
+    marketplaceProcess.command = ["bash", "-c",
+      "curl -fsSL --max-time 20 https://omarchyplugins.com/catalog.json 2>/dev/null | head -c 4194304; true"]
+    marketplaceProcess.running = true
+  }
+
+  function applyMarketplaceCatalog(text) {
+    root.marketplaceFetching = false
+    root.marketplaceFetchedAt = String(new Date().toISOString())
+    var map = {}
+    try {
+      var catalog = JSON.parse(String(text || "{}"))
+      var plugins = catalog.plugins || []
+      for (var i = 0; i < plugins.length; i++) {
+        var entry = plugins[i]
+        if (!entry || typeof entry.id !== "string" || !entry.id) continue
+        map[entry.id] = { verified: entry.verificationStatus === "verified" }
+      }
+    } catch (e) {
+      console.log("marketplace catalog parse failed:", e)
+      return
+    }
+    root.marketplaceMap = map
+    console.log("marketplace entries:", Object.keys(map).length)
+  }
+
+  property Process marketplaceProcess: Process {
+    onExited: function(exitCode) {
+      root.applyMarketplaceCatalog(marketplaceStdout.text)
+    }
+    stdout: StdioCollector {
+      id: marketplaceStdout
+      waitForEnd: true
+    }
+  }
+
   property Process repoScanProcess: Process {
     onExited: function(exitCode) {
       root.reposScanning = false
@@ -931,12 +995,15 @@ Panel {
   Component.onCompleted: {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
     refreshPlugins()
+    fetchMarketplace()
   }
 
   // ------------------------------------------------------------- open / close
 
   function open() {
     refreshPlugins()
+    // Refresh marketplace badges at most once per open when data is stale.
+    if (!root.marketplaceFetching && Object.keys(root.marketplaceMap).length === 0) fetchMarketplace()
     root.controller.show()
     Qt.callLater(function() {
       if (root.opened) root.primeFocus()
@@ -1345,8 +1412,75 @@ Panel {
                     color: Qt.darker(root.contentForeground, 2.0)
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.caption
-                    Layout.fillWidth: true
                     elide: Label.ElideRight
+                  }
+
+                  // Marketplace verification badge: shown for third-party
+                  // plugins that appear in the marketplace catalog.
+                  Rectangle {
+                    id: marketplaceBadge
+                    visible: root.marketplaceEntry(modelData.id) !== null
+                    radius: height / 2
+                    implicitWidth: badgeRow.implicitWidth + Style.space(10)
+                    implicitHeight: Style.space(16)
+                    color: root.marketplaceEntry(modelData.id) !== null
+                      && root.marketplaceEntry(modelData.id).verified
+                      ? Util.alpha(Color.accent, 0.18)
+                      : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+
+                    Row {
+                      id: badgeRow
+                      anchors.centerIn: parent
+                      spacing: Style.space(3)
+
+                      Text {
+                        visible: root.marketplaceEntry(modelData.id) !== null
+                          && root.marketplaceEntry(modelData.id).verified
+                        text: "\uf058"
+                        textFormat: Text.PlainText
+                        color: Color.accent
+                        font.family: root.contentFontFamily
+                        font.pixelSize: Style.font.caption - 1
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+
+                      Text {
+                        text: root.marketplaceEntry(modelData.id) !== null
+                          && root.marketplaceEntry(modelData.id).verified
+                          ? "Verified"
+                          : "Unverified"
+                        textFormat: Text.PlainText
+                        color: root.marketplaceEntry(modelData.id) !== null
+                          && root.marketplaceEntry(modelData.id).verified
+                          ? Color.accent
+                          : Qt.darker(root.contentForeground, 2.0)
+                        font.family: root.contentFontFamily
+                        font.pixelSize: Style.font.caption - 1
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
+                  }
+
+                  Item { Layout.fillWidth: true }
+
+                  // "View on marketplace" link for listed plugins, beside the
+                  // plugin-type description as requested.
+                  Text {
+                    visible: root.marketplaceEntry(modelData.id) !== null
+                    text: "View on marketplace ↗"
+                    textFormat: Text.PlainText
+                    color: Color.accent
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                    font.underline: marketLinkHover.hovered
+
+                    MouseArea {
+                      id: marketLinkHover
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.openMarketplacePage(modelData.id)
+                    }
                   }
                 }
               }
