@@ -158,9 +158,12 @@ Panel {
           && (typeof node.slotSize === "number" || typeof node.labelVisible === "boolean")) {
         return node.text
       }
-      var data = node.data
-      if (data) {
-        for (var j = 0; j < data.length; j++) stack.push(data[j])
+      // QObject::data is not bindable; reading it while iconFor() participates
+      // in a Text binding makes Qt warn on every refresh. Bar buttons are
+      // visual items, so the bindable visual-child tree is the right scope.
+      var children = node.children
+      if (children) {
+        for (var j = 0; j < children.length; j++) stack.push(children[j])
       }
     }
     return ""
