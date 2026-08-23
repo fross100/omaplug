@@ -44,8 +44,91 @@ Panel {
   property var pluginRepos: ({})
   property bool reposScanning: false
 
+  // Marketplace listing info keyed by plugin id: { verified: bool }. Fetched
+  // from the public catalog so rows can show a verification badge and a
+  // "View on marketplace" link for listed plugins.
+  property var marketplaceMap: ({})
+  property bool marketplaceFetching: false
+  property string marketplaceFetchedAt: ""
+
+  function marketplaceEntry(id) {
+    if (modelData_firstParty(id)) return null
+    return root.marketplaceMap[String(id)] || null
+  }
+  function modelData_firstParty(id) {
+    var reg = root.registry
+    var m = reg && reg.installedPlugins ? reg.installedPlugins[id] : null
+    return m ? m.__isFirstParty === true : false
+  }
+  function marketplaceUrlFor(id) {
+    return "https://omarchyplugins.com/plugin.html?id=" + encodeURIComponent(String(id))
+  }
+  function openMarketplacePage(id) {
+    var e = root.marketplaceEntry(id)
+    if (e) Qt.openUrlExternally(root.marketplaceUrlFor(id))
+  }
+
   property string searchText: ""
   property int filterMode: 0 // 0 all, 1 omarchy, 2 third-party, 4 adna
+  property string filterKind: "" // "" all types, else a kind like bar-widget
+
+  // Kind choices derived from what is actually installed, so the dropdown
+  // only offers types the user can really filter by.
+  // Canonical Omarchy plugin kinds (Quattro contract). Anything outside this
+  // list is grouped under "Other".
+  // Canonical Omarchy plugin kinds (Quattro contract) with display labels,
+  // in fixed dropdown order. Anything outside this list groups under Other.
+  readonly property var knownKinds: [
+    { value: "bar-widget", label: "Bar Widget" },
+    { value: "panel", label: "Panel" },
+    { value: "overlay", label: "Overlay" },
+    { value: "menu", label: "Menu" },
+    { value: "service", label: "Service" },
+    { value: "bar", label: "Bar" }
+  ]
+
+  readonly property var kindOptions: {
+    var installed = {}
+    var hasOther = false
+    for (var i = 0; i < root.pluginRows.length; i++) {
+      var parts = String(root.pluginRows[i].kinds || "").split(", ")
+      for (var j = 0; j < parts.length; j++) {
+        var k = parts[j].trim()
+        if (k === "") continue
+        var canonical = false
+        for (var n = 0; n < root.knownKinds.length; n++) {
+          if (root.knownKinds[n].value === k) { canonical = true; break }
+        }
+        if (canonical) installed[k] = true
+        else hasOther = true
+      }
+    }
+    var opts = [{ value: "", label: "All types" }]
+    for (var m = 0; m < root.knownKinds.length; m++) {
+      if (installed[root.knownKinds[m].value] === true)
+        opts.push({ value: root.knownKinds[m].value, label: root.knownKinds[m].label })
+    }
+    if (hasOther) opts.push({ value: "_other", label: "Other" })
+    return opts
+  }
+
+  function rowMatchesKind(p) {
+    if (root.filterKind === "") return true
+    var kinds = String(p.kinds || "").split(", ")
+    if (root.filterKind === "_other") {
+      for (var i = 0; i < kinds.length; i++) {
+        var k = kinds[i].trim()
+        if (k === "") continue
+        var canonical = false
+        for (var n = 0; n < root.knownKinds.length; n++) {
+          if (root.knownKinds[n].value === k) { canonical = true; break }
+        }
+        if (!canonical) return true
+      }
+      return false
+    }
+    return kinds.indexOf(root.filterKind) !== -1
+  }
 
   // Update checking state, keyed by the plugin folder name (sourceKey).
   property var updateStates: ({})
@@ -148,7 +231,17 @@ Panel {
   // module slot on the bar holds the instantiated BarWidget, whose button
   // carries the author's `text` glyph. This stays in sync with what the bar
   // actually renders (no hardcoded copy to drift).
+  property var _glyphCache: ({})
+  function invalidateGlyphCache() { root._glyphCache = {} }
+
   function liveGlyphFor(id) {
+    if (root._glyphCache[id] !== undefined) return root._glyphCache[id]
+    var glyph = liveGlyphForUncached(id)
+    root._glyphCache[id] = glyph
+    return glyph
+  }
+
+  function liveGlyphForUncached(id) {
     var bar = root.bar
     if (!bar || !bar.moduleSlots) return ""
     var slots = bar.moduleSlots
@@ -230,6 +323,7 @@ Panel {
     if (root.filterMode === 1 && !p.firstParty) return false
     if (root.filterMode === 2 && p.firstParty) return false
     if (root.filterMode === 4 && String(p.id).indexOf("adna.") !== 0) return false
+    if (!root.rowMatchesKind(p)) return false
     var q = root.searchText.trim().toLowerCase()
     if (q === "") return true
     return String(p.name || "").toLowerCase().indexOf(q) !== -1
@@ -419,7 +513,6 @@ Panel {
   // The script echoes a CHECK line before each plugin so the updates page can
   // show per-plugin progress while the fetch runs, then the result line.
   function checkUpdates() {
-    console.log("checkUpdates start, checkingUpdates=", root.checkingUpdates, "updatingId=", root.updatingId)
     var reg = root.registry
     var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
     console.log("pluginsDir=", dir)
@@ -445,9 +538,7 @@ Panel {
       + "  fi\n"
       + "done; } | { head -c 65536; cat >/dev/null; }"
     updateCheckProcess.command = ["bash", "-c", script, dir]
-    console.log("checkUpdates command set, running...")
     updateCheckProcess.running = true
-    console.log("checkUpdates running=", updateCheckProcess.running, "pid=", updateCheckProcess.processId)
   }
 
   // Incremental per-line parse of the streaming check output. The collector's
@@ -536,7 +627,6 @@ Panel {
   }
 
   function onUpdateFinished(exitCode) {
-    console.log("onUpdateFinished exitCode=", exitCode, "id=", root.updatingId)
     var id = root.updatingId
     root.updatingId = ""
     if (exitCode === 0)
@@ -549,10 +639,49 @@ Panel {
     Qt.callLater(function() { root.checkUpdates() })
   }
 
+  // Fetches the public marketplace catalog (capped at 2 MB like every other
+  // retained output) and builds the id -> {verified} map.
+  function fetchMarketplace() {
+    if (root.marketplaceFetching) return
+    root.marketplaceFetching = true
+    marketplaceProcess.command = ["bash", "-c",
+      "curl -fsSL --max-time 20 https://omarchyplugins.com/catalog.json 2>/dev/null | head -c 4194304; true"]
+    marketplaceProcess.running = true
+  }
+
+  function applyMarketplaceCatalog(text) {
+    root.marketplaceFetching = false
+    root.marketplaceFetchedAt = String(new Date().toISOString())
+    var map = {}
+    try {
+      var catalog = JSON.parse(String(text || "{}"))
+      var plugins = catalog.plugins || []
+      for (var i = 0; i < plugins.length; i++) {
+        var entry = plugins[i]
+        if (!entry || typeof entry.id !== "string" || !entry.id) continue
+        map[entry.id] = { verified: entry.verificationStatus === "verified" }
+      }
+    } catch (e) {
+      console.log("marketplace catalog parse failed:", e)
+      return
+    }
+    root.marketplaceMap = map
+    console.log("marketplace entries:", Object.keys(map).length)
+  }
+
+  property Process marketplaceProcess: Process {
+    onExited: function(exitCode) {
+      root.applyMarketplaceCatalog(marketplaceStdout.text)
+    }
+    stdout: StdioCollector {
+      id: marketplaceStdout
+      waitForEnd: true
+    }
+  }
+
   property Process repoScanProcess: Process {
     onExited: function(exitCode) {
       root.reposScanning = false
-      console.log("repoScanProcess onExited exitCode=", exitCode, "stdout=", (repoScanStdout.text || "").substring(0, 200))
       root.applyRepoScan(repoScanStdout.text)
     }
     stdout: StdioCollector {
@@ -576,12 +705,10 @@ Panel {
       if (key && url) repos[key] = url
     }
     root.pluginRepos = repos
-    console.log("applyRepoScan keys=", Object.keys(repos).length)
   }
 
   property Process updateCheckProcess: Process {
     onExited: function(exitCode) {
-      console.log("updateCheckProcess onExited exitCode=", exitCode, "stdout=", (updateCheckStdout.text || "").substring(0, 200))
       root.finishUpdateCheck()
     }
     stdout: StdioCollector {
@@ -593,7 +720,6 @@ Panel {
 
   property Process updateProcess: Process {
     onExited: function(exitCode) {
-      console.log("updateProcess onExited exitCode=", exitCode, "id=", root.updatingId)
       root.onUpdateFinished(exitCode)
     }
     stdout: StdioCollector { id: updateStdout; waitForEnd: true }
@@ -610,13 +736,11 @@ Panel {
   // setsid/nohup command and exit, so no output collection is required.
   property Process installLaunchProcess: Process {
     onExited: function(exitCode) {
-      console.log("installLaunchProcess onExited exitCode=", exitCode)
     }
   }
 
   property Process removeProcess: Process {
     onExited: function(exitCode) {
-      console.log("removeProcess onExited exitCode=", exitCode)
       root.onRemoveFinished(exitCode)
     }
     stdout: StdioCollector { id: removeStdout; waitForEnd: true }
@@ -626,7 +750,6 @@ Panel {
   // work runs setsid/nohup from a short-lived Process that exits immediately.
   property Process restartShellProcess: Process {
     onExited: function(exitCode) {
-      console.log("restartShellProcess onExited exitCode=", exitCode)
     }
   }
 
@@ -925,18 +1048,24 @@ Panel {
 
   Connections {
     target: root.registry
-    function onRegistryRevisionChanged() { root.refreshPlugins() }
+    function onRegistryRevisionChanged() {
+      root.invalidateGlyphCache()
+      root.refreshPlugins()
+    }
   }
 
   Component.onCompleted: {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
     refreshPlugins()
+    fetchMarketplace()
   }
 
   // ------------------------------------------------------------- open / close
 
   function open() {
     refreshPlugins()
+    // Refresh marketplace badges at most once per open when data is stale.
+    if (!root.marketplaceFetching && Object.keys(root.marketplaceMap).length === 0) fetchMarketplace()
     root.controller.show()
     Qt.callLater(function() {
       if (root.opened) root.primeFocus()
@@ -1144,6 +1273,7 @@ Panel {
             verticalPadding: Style.space(5)
             onClicked: {
               root.updatesPageOpen = true
+              updatesPageLoader.stayLoaded = true
               if (!root.checkingUpdates) root.checkUpdates()
             }
           }
@@ -1199,6 +1329,20 @@ Panel {
             onChanged: function(v) { root.filterMode = parseInt(v) }
           }
 
+          Dropdown {
+            id: kindDropdown
+            Layout.preferredWidth: Style.space(130)
+            showLabel: false
+            value: root.filterKind
+            options: root.kindOptions
+            foreground: root.contentForeground
+            background: root.panelBackground
+            popupBorder: Util.alpha(root.contentForeground, 0.2)
+            accent: Color.accent
+            fontFamily: root.contentFontFamily
+            onChanged: function(v) { root.filterKind = v }
+          }
+
           TextField {
             id: searchField
             Layout.fillWidth: true
@@ -1231,7 +1375,12 @@ Panel {
           }
 
           delegate: Rectangle {
+            id: pluginRowDelegate
             required property var modelData
+            readonly property bool mFirstParty: modelData.firstParty === true
+            readonly property var mEntry: mFirstParty ? null : (root.marketplaceMap[String(modelData.id)] || null)
+            readonly property bool mListed: mEntry !== null
+            readonly property bool mVerified: mListed && mEntry.verified === true
             width: pluginList.width
             height: Math.max(Style.space(56), row.implicitHeight + Style.space(18))
             radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
@@ -1291,14 +1440,55 @@ Panel {
                   spacing: Style.space(8)
 
                   Label {
+                    id: pluginNameLabel
                     text: modelData.name
                     textFormat: Text.PlainText
                     color: root.contentForeground
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
-                    Layout.fillWidth: true
+                    Layout.maximumWidth: (pluginList.width - Style.space(160)) * 0.7
                     elide: Label.ElideRight
+                  }
+
+                  Rectangle {
+                    id: marketplaceBadge
+                    visible: pluginRowDelegate.mListed
+                    radius: height / 2
+                    implicitWidth: badgeRow.implicitWidth + Style.space(10)
+                    implicitHeight: Style.space(16)
+                    color: pluginRowDelegate.mVerified
+                      ? Util.alpha(Color.accent, 0.18)
+                      : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
+
+                    Row {
+                      id: badgeRow
+                      anchors.centerIn: parent
+                      spacing: Style.space(3)
+
+                      Text {
+                        visible: pluginRowDelegate.mVerified
+                        text: "\uf058"
+                        textFormat: Text.PlainText
+                        color: Color.accent
+                        font.family: root.contentFontFamily
+                        font.pixelSize: Style.font.caption - 1
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+
+                      Text {
+                        text: pluginRowDelegate.mVerified
+                          ? "Verified"
+                          : "Unverified"
+                        textFormat: Text.PlainText
+                        color: pluginRowDelegate.mVerified
+                          ? Color.accent
+                          : Qt.darker(root.contentForeground, 2.0)
+                        font.family: root.contentFontFamily
+                        font.pixelSize: Style.font.caption - 1
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
                   }
                 }
 
@@ -1310,9 +1500,10 @@ Panel {
                   font.pixelSize: Style.font.bodySmall
                   Layout.fillWidth: true
                   wrapMode: Label.Wrap
-                  maximumLineCount: 2
+                  maximumLineCount: 3
                   elide: Label.ElideRight
                 }
+
 
                 RowLayout {
                   spacing: Style.space(4)
@@ -1348,6 +1539,31 @@ Panel {
                     Layout.fillWidth: true
                     elide: Label.ElideRight
                   }
+
+                }
+
+                // Marketplace listing link on its own line under the
+                // version / author / kind row.
+                Text {
+                  visible: pluginRowDelegate.mListed
+                  text: "View on marketplace ↗"
+                  textFormat: Text.PlainText
+                  color: Color.accent
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                  font.underline: marketLinkHover.hovered
+
+                  HoverHandler {
+                    id: marketLinkHover
+                    cursorShape: Qt.PointingHandCursor
+                  }
+
+                  MouseArea {
+                    id: marketLinkClick
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.openMarketplacePage(modelData.id)
+                  }
                 }
               }
 
@@ -1356,7 +1572,7 @@ Panel {
                 spacing: Style.space(4)
 
                 RowLayout {
-                  Layout.alignment: Qt.AlignHCenter
+                  Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                   spacing: Style.space(6)
 
                   Button {
@@ -1372,6 +1588,7 @@ Panel {
                     iconSize: Style.font.caption
                     horizontalPadding: Style.space(6)
                     verticalPadding: Style.space(3)
+                    Layout.alignment: Qt.AlignVCenter
                     onClicked: root.openPluginRepo(modelData.sourceKey)
                   }
 
@@ -1395,6 +1612,7 @@ Panel {
                     id: toggle
                     rounded: true
                     checked: modelData.enabled
+                    Layout.alignment: Qt.AlignVCenter
                     foreground: root.contentForeground
                     accent: Color.accent
                     onToggled: {
@@ -1414,6 +1632,7 @@ Panel {
                     fontSize: Style.font.bodySmall
                     horizontalPadding: Style.space(6)
                     verticalPadding: Style.space(3)
+                    Layout.alignment: Qt.AlignVCenter
                     onClicked: {
                       var btn = rowMenuButton
                       var pt = btn.mapToItem(rowMenuOverlay, 0, btn.height)
@@ -1504,6 +1723,22 @@ Panel {
       anchors.fill: parent
       z: 5000
       color: root.panelBackground
+
+      // Contents are heavy (full second list). Instantiate lazily the first
+      // time the user opens this page; afterwards they stay alive.
+      Loader {
+        id: updatesPageLoader
+        anchors.fill: parent
+        // stayLoaded keeps contents alive after first open
+        property bool stayLoaded: false
+        active: root.updatesPageOpen || stayLoaded
+        sourceComponent: updatesPageComponent
+      }
+
+      Component {
+        id: updatesPageComponent
+        Item {
+          anchors.fill: parent
 
       PanelKeyCatcher {
         anchors.fill: parent
@@ -1770,6 +2005,8 @@ Panel {
             verticalPadding: Style.space(6)
             onClicked: root.updateAll()
           }
+        }
+      }
         }
       }
     }
