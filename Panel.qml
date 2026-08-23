@@ -1433,7 +1433,6 @@ Panel {
 
                   // "View on marketplace" link for listed plugins.
                   Text {
-                  Text {
                     visible: root.marketplaceEntry(modelData.id) !== null
                     text: "View on marketplace ↗"
                     textFormat: Text.PlainText
