@@ -2,12 +2,16 @@
 
 **A small tool for managing your Omarchy plugins.**
 
+[![Marketplace](https://img.shields.io/badge/Omarchy_Marketplace-listed-blue)](https://omarchyplugins.com/plugin.html?id=omaplug) [![Verified](https://img.shields.io/badge/Automated_Security_Baseline-verified-brightgreen)](https://github.com/HANCORE-linux/omarchy-plugin-marketplace/blob/main/SECURITY.md#automated-security-baseline)
+
 Access it right from the Omarchy bar — it gives you a centralized place to view and organize the plugins you have installed. Here are a few things you can use it for:
 
 - Easily turn individual plugins on or off as needed.
 - Check for available updates and update them individually — or all at once.
 - Remove plugins individually, or several in one go.
 - Jump straight to each plugin's repo, or browse the [Omarchy marketplace](https://omarchyplugins.com).
+
+Omaplug is listed on the marketplace: [omarchyplugins.com/plugin.html?id=omaplug](https://omarchyplugins.com/plugin.html?id=omaplug)
 
 ## Screenshots
 
