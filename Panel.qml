@@ -172,7 +172,17 @@ Panel {
   // module slot on the bar holds the instantiated BarWidget, whose button
   // carries the author's `text` glyph. This stays in sync with what the bar
   // actually renders (no hardcoded copy to drift).
+  property var _glyphCache: ({})
+  function invalidateGlyphCache() { root._glyphCache = {} }
+
   function liveGlyphFor(id) {
+    if (root._glyphCache[id] !== undefined) return root._glyphCache[id]
+    var glyph = liveGlyphForUncached(id)
+    root._glyphCache[id] = glyph
+    return glyph
+  }
+
+  function liveGlyphForUncached(id) {
     var bar = root.bar
     if (!bar || !bar.moduleSlots) return ""
     var slots = bar.moduleSlots
@@ -443,7 +453,6 @@ Panel {
   // The script echoes a CHECK line before each plugin so the updates page can
   // show per-plugin progress while the fetch runs, then the result line.
   function checkUpdates() {
-    console.log("checkUpdates start, checkingUpdates=", root.checkingUpdates, "updatingId=", root.updatingId)
     var reg = root.registry
     var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
     console.log("pluginsDir=", dir)
@@ -469,9 +478,7 @@ Panel {
       + "  fi\n"
       + "done; } | { head -c 65536; cat >/dev/null; }"
     updateCheckProcess.command = ["bash", "-c", script, dir]
-    console.log("checkUpdates command set, running...")
     updateCheckProcess.running = true
-    console.log("checkUpdates running=", updateCheckProcess.running, "pid=", updateCheckProcess.processId)
   }
 
   // Incremental per-line parse of the streaming check output. The collector's
@@ -560,7 +567,6 @@ Panel {
   }
 
   function onUpdateFinished(exitCode) {
-    console.log("onUpdateFinished exitCode=", exitCode, "id=", root.updatingId)
     var id = root.updatingId
     root.updatingId = ""
     if (exitCode === 0)
@@ -616,7 +622,6 @@ Panel {
   property Process repoScanProcess: Process {
     onExited: function(exitCode) {
       root.reposScanning = false
-      console.log("repoScanProcess onExited exitCode=", exitCode, "stdout=", (repoScanStdout.text || "").substring(0, 200))
       root.applyRepoScan(repoScanStdout.text)
     }
     stdout: StdioCollector {
@@ -640,12 +645,10 @@ Panel {
       if (key && url) repos[key] = url
     }
     root.pluginRepos = repos
-    console.log("applyRepoScan keys=", Object.keys(repos).length)
   }
 
   property Process updateCheckProcess: Process {
     onExited: function(exitCode) {
-      console.log("updateCheckProcess onExited exitCode=", exitCode, "stdout=", (updateCheckStdout.text || "").substring(0, 200))
       root.finishUpdateCheck()
     }
     stdout: StdioCollector {
@@ -657,7 +660,6 @@ Panel {
 
   property Process updateProcess: Process {
     onExited: function(exitCode) {
-      console.log("updateProcess onExited exitCode=", exitCode, "id=", root.updatingId)
       root.onUpdateFinished(exitCode)
     }
     stdout: StdioCollector { id: updateStdout; waitForEnd: true }
@@ -674,13 +676,11 @@ Panel {
   // setsid/nohup command and exit, so no output collection is required.
   property Process installLaunchProcess: Process {
     onExited: function(exitCode) {
-      console.log("installLaunchProcess onExited exitCode=", exitCode)
     }
   }
 
   property Process removeProcess: Process {
     onExited: function(exitCode) {
-      console.log("removeProcess onExited exitCode=", exitCode)
       root.onRemoveFinished(exitCode)
     }
     stdout: StdioCollector { id: removeStdout; waitForEnd: true }
@@ -690,7 +690,6 @@ Panel {
   // work runs setsid/nohup from a short-lived Process that exits immediately.
   property Process restartShellProcess: Process {
     onExited: function(exitCode) {
-      console.log("restartShellProcess onExited exitCode=", exitCode)
     }
   }
 
@@ -989,7 +988,10 @@ Panel {
 
   Connections {
     target: root.registry
-    function onRegistryRevisionChanged() { root.refreshPlugins() }
+    function onRegistryRevisionChanged() {
+      root.invalidateGlyphCache()
+      root.refreshPlugins()
+    }
   }
 
   Component.onCompleted: {
@@ -1211,6 +1213,7 @@ Panel {
             verticalPadding: Style.space(5)
             onClicked: {
               root.updatesPageOpen = true
+              updatesPageLoader.stayLoaded = true
               if (!root.checkingUpdates) root.checkUpdates()
             }
           }
@@ -1298,7 +1301,12 @@ Panel {
           }
 
           delegate: Rectangle {
+            id: pluginRowDelegate
             required property var modelData
+            readonly property bool mFirstParty: modelData.firstParty === true
+            readonly property var mEntry: mFirstParty ? null : (root.marketplaceMap[String(modelData.id)] || null)
+            readonly property bool mListed: mEntry !== null
+            readonly property bool mVerified: mListed && mEntry.verified === true
             width: pluginList.width
             height: Math.max(Style.space(56), row.implicitHeight + Style.space(18))
             radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
@@ -1371,12 +1379,11 @@ Panel {
 
                   Rectangle {
                     id: marketplaceBadge
-                    visible: root.marketplaceEntry(modelData.id) !== null
+                    visible: pluginRowDelegate.mListed
                     radius: height / 2
                     implicitWidth: badgeRow.implicitWidth + Style.space(10)
                     implicitHeight: Style.space(16)
-                    color: root.marketplaceEntry(modelData.id) !== null
-                      && root.marketplaceEntry(modelData.id).verified
+                    color: pluginRowDelegate.mVerified
                       ? Util.alpha(Color.accent, 0.18)
                       : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
 
@@ -1386,8 +1393,7 @@ Panel {
                       spacing: Style.space(3)
 
                       Text {
-                        visible: root.marketplaceEntry(modelData.id) !== null
-                          && root.marketplaceEntry(modelData.id).verified
+                        visible: pluginRowDelegate.mVerified
                         text: "\uf058"
                         textFormat: Text.PlainText
                         color: Color.accent
@@ -1397,13 +1403,11 @@ Panel {
                       }
 
                       Text {
-                        text: root.marketplaceEntry(modelData.id) !== null
-                          && root.marketplaceEntry(modelData.id).verified
+                        text: pluginRowDelegate.mVerified
                           ? "Verified"
                           : "Unverified"
                         textFormat: Text.PlainText
-                        color: root.marketplaceEntry(modelData.id) !== null
-                          && root.marketplaceEntry(modelData.id).verified
+                        color: pluginRowDelegate.mVerified
                           ? Color.accent
                           : Qt.darker(root.contentForeground, 2.0)
                         font.family: root.contentFontFamily
@@ -1467,7 +1471,7 @@ Panel {
                 // Marketplace listing link on its own line under the
                 // version / author / kind row.
                 Text {
-                  visible: root.marketplaceEntry(modelData.id) !== null
+                  visible: pluginRowDelegate.mListed
                   text: "View on marketplace ↗"
                   textFormat: Text.PlainText
                   color: Color.accent
@@ -1641,6 +1645,22 @@ Panel {
       anchors.fill: parent
       z: 5000
       color: root.panelBackground
+
+      // Contents are heavy (full second list). Instantiate lazily the first
+      // time the user opens this page; afterwards they stay alive.
+      Loader {
+        id: updatesPageLoader
+        anchors.fill: parent
+        // stayLoaded keeps contents alive after first open
+        property bool stayLoaded: false
+        active: root.updatesPageOpen || stayLoaded
+        sourceComponent: updatesPageComponent
+      }
+
+      Component {
+        id: updatesPageComponent
+        Item {
+          anchors.fill: parent
 
       PanelKeyCatcher {
         anchors.fill: parent
@@ -1907,6 +1927,8 @@ Panel {
             verticalPadding: Style.space(6)
             onClicked: root.updateAll()
           }
+        }
+      }
         }
       }
     }
