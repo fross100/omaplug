@@ -76,25 +76,37 @@ Panel {
   // only offers types the user can really filter by.
   // Canonical Omarchy plugin kinds (Quattro contract). Anything outside this
   // list is grouped under "Other".
+  // Canonical Omarchy plugin kinds (Quattro contract) with display labels,
+  // in fixed dropdown order. Anything outside this list groups under Other.
   readonly property var knownKinds: [
-    "bar-widget", "panel", "overlay", "menu", "service", "bar"
+    { value: "bar-widget", label: "Bar Widget" },
+    { value: "panel", label: "Panel" },
+    { value: "overlay", label: "Overlay" },
+    { value: "menu", label: "Menu" },
+    { value: "service", label: "Service" },
+    { value: "bar", label: "Bar" }
   ]
 
   readonly property var kindOptions: {
-    var opts = [{ value: "", label: "All types" }]
-    var seen = {}
+    var installed = {}
     var hasOther = false
     for (var i = 0; i < root.pluginRows.length; i++) {
       var parts = String(root.pluginRows[i].kinds || "").split(", ")
       for (var j = 0; j < parts.length; j++) {
         var k = parts[j].trim()
         if (k === "") continue
-        if (root.knownKinds.indexOf(k) !== -1) {
-          if (seen[k] === undefined) { seen[k] = true; opts.push({ value: k, label: k }) }
-        } else {
-          hasOther = true
+        var canonical = false
+        for (var n = 0; n < root.knownKinds.length; n++) {
+          if (root.knownKinds[n].value === k) { canonical = true; break }
         }
+        if (canonical) installed[k] = true
+        else hasOther = true
       }
+    }
+    var opts = [{ value: "", label: "All types" }]
+    for (var m = 0; m < root.knownKinds.length; m++) {
+      if (installed[root.knownKinds[m].value] === true)
+        opts.push({ value: root.knownKinds[m].value, label: root.knownKinds[m].label })
     }
     if (hasOther) opts.push({ value: "_other", label: "Other" })
     return opts
@@ -106,7 +118,12 @@ Panel {
     if (root.filterKind === "_other") {
       for (var i = 0; i < kinds.length; i++) {
         var k = kinds[i].trim()
-        if (k !== "" && root.knownKinds.indexOf(k) === -1) return true
+        if (k === "") continue
+        var canonical = false
+        for (var n = 0; n < root.knownKinds.length; n++) {
+          if (root.knownKinds[n].value === k) { canonical = true; break }
+        }
+        if (!canonical) return true
       }
       return false
     }
