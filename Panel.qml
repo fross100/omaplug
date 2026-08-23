@@ -1422,7 +1422,7 @@ Panel {
                   font.pixelSize: Style.font.bodySmall
                   Layout.fillWidth: true
                   wrapMode: Label.Wrap
-                  maximumLineCount: 2
+                  maximumLineCount: 3
                   elide: Label.ElideRight
                 }
 
