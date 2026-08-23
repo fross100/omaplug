@@ -1462,22 +1462,25 @@ Panel {
                     elide: Label.ElideRight
                   }
 
-                  Text {
-                    visible: root.marketplaceEntry(modelData.id) !== null
-                    text: "View on marketplace ↗"
-                    textFormat: Text.PlainText
-                    color: Color.accent
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: marketLinkHover.hovered
+                }
 
-                    MouseArea {
-                      id: marketLinkHover
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: root.openMarketplacePage(modelData.id)
-                    }
+                // Marketplace listing link on its own line under the
+                // version / author / kind row.
+                Text {
+                  visible: root.marketplaceEntry(modelData.id) !== null
+                  text: "View on marketplace ↗"
+                  textFormat: Text.PlainText
+                  color: Color.accent
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.caption
+                  font.underline: marketLinkHover.hovered
+
+                  MouseArea {
+                    id: marketLinkHover
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.openMarketplacePage(modelData.id)
                   }
                 }
               }
