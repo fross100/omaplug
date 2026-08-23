@@ -1364,6 +1364,7 @@ Panel {
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
+                    Layout.fillWidth: true
                     elide: Label.ElideRight
                   }
 
@@ -1450,23 +1451,13 @@ Panel {
                   }
 
                   Label {
-                    visible: modelData.kinds !== "" && root.marketplaceEntry(modelData.id) === null
+                    visible: modelData.kinds !== ""
                     text: "· " + modelData.kinds
                     textFormat: Text.PlainText
                     color: Qt.darker(root.contentForeground, 2.0)
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.caption
                     Layout.fillWidth: true
-                    elide: Label.ElideRight
-                  }
-
-                  Label {
-                    visible: modelData.kinds !== "" && root.marketplaceEntry(modelData.id) !== null
-                    text: "· " + modelData.kinds
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
                     elide: Label.ElideRight
                   }
 
@@ -1487,8 +1478,6 @@ Panel {
                       onClicked: root.openMarketplacePage(modelData.id)
                     }
                   }
-
-                  Item { Layout.fillWidth: true }
                 }
               }
 
