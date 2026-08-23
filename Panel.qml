@@ -74,17 +74,43 @@ Panel {
 
   // Kind choices derived from what is actually installed, so the dropdown
   // only offers types the user can really filter by.
+  // Canonical Omarchy plugin kinds (Quattro contract). Anything outside this
+  // list is grouped under "Other".
+  readonly property var knownKinds: [
+    "bar-widget", "panel", "overlay", "menu", "service", "bar"
+  ]
+
   readonly property var kindOptions: {
     var opts = [{ value: "", label: "All types" }]
     var seen = {}
+    var hasOther = false
     for (var i = 0; i < root.pluginRows.length; i++) {
       var parts = String(root.pluginRows[i].kinds || "").split(", ")
       for (var j = 0; j < parts.length; j++) {
         var k = parts[j].trim()
-        if (k !== "" && seen[k] === undefined) { seen[k] = true; opts.push({ value: k, label: k }) }
+        if (k === "") continue
+        if (root.knownKinds.indexOf(k) !== -1) {
+          if (seen[k] === undefined) { seen[k] = true; opts.push({ value: k, label: k }) }
+        } else {
+          hasOther = true
+        }
       }
     }
+    if (hasOther) opts.push({ value: "_other", label: "Other" })
     return opts
+  }
+
+  function rowMatchesKind(p) {
+    if (root.filterKind === "") return true
+    var kinds = String(p.kinds || "").split(", ")
+    if (root.filterKind === "_other") {
+      for (var i = 0; i < kinds.length; i++) {
+        var k = kinds[i].trim()
+        if (k !== "" && root.knownKinds.indexOf(k) === -1) return true
+      }
+      return false
+    }
+    return kinds.indexOf(root.filterKind) !== -1
   }
 
   // Update checking state, keyed by the plugin folder name (sourceKey).
@@ -280,7 +306,7 @@ Panel {
     if (root.filterMode === 1 && !p.firstParty) return false
     if (root.filterMode === 2 && p.firstParty) return false
     if (root.filterMode === 4 && String(p.id).indexOf("adna.") !== 0) return false
-    if (root.filterKind !== "" && String(p.kinds || "").split(", ").indexOf(root.filterKind) === -1) return false
+    if (!root.rowMatchesKind(p)) return false
     var q = root.searchText.trim().toLowerCase()
     if (q === "") return true
     return String(p.name || "").toLowerCase().indexOf(q) !== -1
