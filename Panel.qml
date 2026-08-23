@@ -116,6 +116,23 @@ Panel {
     }
   }
 
+  // Detached install helpers have no live process handle here (setsid/nohup
+  // survives the plugin reload that unloads this panel), so a helper that
+  // dies mid-install would otherwise leave the dialog stuck on "Installing…"
+  // forever. Bound the wait; git clones can be slow, so allow three minutes.
+  property Timer installWatchdog: Timer {
+    interval: 180000
+    repeat: false
+    onTriggered: {
+      if (!root.installDetachedRunning && !root.installRunning) return
+      root.installDetachedRunning = false
+      root.installRunning = false
+      root.installFailed = true
+      root.installResult = "Install timed out"
+      root.installStatusPath = ""
+    }
+  }
+
   function iconColorFor(name) {
     var hash = 0
     for (var i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
@@ -336,7 +353,7 @@ Panel {
     var id = root.removeQueue.shift()
     root.removingPlugin = true
     root.removeSummary = "Removing " + id + "…"
-    removeProcess.command = ["bash", "-c", "omarchy plugin remove \"$0\" --yes 2>&1 | { head -c 8192; cat >/dev/null; }", id]
+    removeProcess.command = ["bash", "-c", "omarchy plugin remove \"$0\" --yes 2>&1 | { head -c 8192; cat >/dev/null; }; exit ${PIPESTATUS[0]}", id]
     removeProcess.running = true
   }
 
@@ -489,7 +506,7 @@ Panel {
     if (root.updatingId !== "") return
     root.updatingId = id
     root.updateSummary = "Updating " + id + "…"
-    updateProcess.command = ["bash", "-c", "omarchy plugin update \"$0\" --yes 2>&1 | { head -c 8192; cat >/dev/null; }", id]
+    updateProcess.command = ["bash", "-c", "omarchy plugin update \"$0\" --yes 2>&1 | { head -c 8192; cat >/dev/null; }; exit ${PIPESTATUS[0]}", id]
     updateProcess.running = true
   }
 
@@ -502,7 +519,7 @@ Panel {
     if (pending === 0) return
     root.updatingAll = true
     root.updateSummary = "Updating all " + pending + "…"
-    updateAllProcess.command = ["bash", "-c", "omarchy plugin update --yes 2>&1 | { head -c 8192; cat >/dev/null; }"]
+    updateAllProcess.command = ["bash", "-c", "omarchy plugin update --yes 2>&1 | { head -c 8192; cat >/dev/null; }; exit ${PIPESTATUS[0]}"]
     updateAllProcess.running = true
   }
 
@@ -642,8 +659,16 @@ Panel {
       }
       return true
     }
-    var sshUrlPat = /^ssh:\/\/git@github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?\/?$/
-    if (sshUrlPat.test(u)) return true
+    var sshUrlPat = /^ssh:\/\/git@github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:\.git)?\/?$/
+    if (sshUrlPat.test(u)) {
+      var g = u.match(/^ssh:\/\/git@github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(?:\.git)?\/?$/)
+      if (g) {
+        var go = g[1], gr = g[2].replace(/\.git$/, "")
+        if (go.indexOf("..") !== -1 || gr.indexOf("..") !== -1) return false
+        if (!/^[A-Za-z0-9]/.test(go) || !/^[A-Za-z0-9]/.test(gr)) return false
+      }
+      return true
+    }
     return false
   }
 
@@ -716,14 +741,18 @@ Panel {
     }
     onExited: function(exitCode) {
       if (exitCode !== 0) {
+        root.installWatchdog.stop()
         root.installDetachedRunning = false
+        root.installRunning = false
         root.installFailed = true
         root.installResult = "Could not create secure status file"
         return
       }
       var p = String(installMktmpStdout.text || "").trim()
       if (p === "" || p.indexOf("/") !== 0) {
+        root.installWatchdog.stop()
         root.installDetachedRunning = false
+        root.installRunning = false
         root.installFailed = true
         root.installResult = "Could not create secure status file"
         return
@@ -739,14 +768,24 @@ Panel {
         + "umask 077; chmod 600 \"$STATUS\" 2>/dev/null || true; "
         + "printf \"installing\\n\" >> \"$STATUS\"; "
         + "TMP_OUT=$(mktemp); "
-        + "omarchy plugin add \"$URL\" --yes 2>&1 | { head -c 8192 >\"$TMP_OUT\"; cat >/dev/null; }; rc=${PIPESTATUS[0]}; "
+        + "omarchy plugin add \"$URL\" --yes 2>&1 | { head -c 8000 >\"$TMP_OUT\"; cat >/dev/null; }; rc=${PIPESTATUS[0]}; "
         + "out=$(cat \"$TMP_OUT\"); rm -f \"$TMP_OUT\"; "
-        + "printf \"%.8192s\\n\" \"$out\" >> \"$STATUS\"; "
+        // Reserve marker headroom below the 8192 ceiling: 11B header + 8001B
+        // output + <=105B id line + <=16B terminal markers always fit in the
+        // consumer's first-8192-char inspection window, so a chatty installer
+        // can never push install_failed/done out of view.
+        + "printf \"%.8000s\\n\" \"$out\" >> \"$STATUS\"; "
         + "head -c 8192 \"$STATUS\" > \"$STATUS.tmp\" 2>/dev/null && mv \"$STATUS.tmp\" \"$STATUS\" 2>/dev/null || true; "
-        + "if [ $rc -ne 0 ]; then printf \"install_failed\\n\" >> \"$STATUS\"; exit 1; fi; "
-        + "id=$(printf \"%s\\n\" \"$out\" | sed -n \"s/.*Added \\([^ ]*\\) into.*/\\1/p\"); "
+        + "id=\"\"; "
+        + "if [ $rc -eq 0 ]; then id=$(printf \"%s\\n\" \"$out\" | sed -n \"s/.*Added \\([^ ]*\\) into.*/\\1/p\"); fi; "
+        + "id=${id:0:100}; "
         + "if [ -n \"$id\" ]; then printf \"id=%s\\n\" \"$id\" >> \"$STATUS\"; fi; "
+        // done must ALWAYS be the last marker (including on failure): the
+        // consumer finalizes only on done, so a bare install_failed would
+        // leave the dialog stuck on "Installing…" forever.
+        + "if [ $rc -ne 0 ]; then printf \"install_failed\\n\" >> \"$STATUS\"; fi; "
         + "printf \"done\\n\" >> \"$STATUS\"; "
+        + "if [ $rc -ne 0 ]; then exit 1; fi; "
         + "' -- \"$0\" \"$1\" >/dev/null 2>&1 &",
         root._installPendingUrl, p]
       installLaunchProcess.command = launch
@@ -758,6 +797,7 @@ Panel {
     root._installPendingUrl = url
     root.installDetachedRunning = true
     root.installResult = "Installing " + url + "…"
+    root.installWatchdog.restart()
     installStatusMktmpProcess.command = ["bash", "-c", 'umask 077; mktemp "${XDG_RUNTIME_DIR:-/tmp}/omaplug-install-XXXXXX.status" 2>/dev/null || mktemp /tmp/omaplug-install-XXXXXX.status']
     installStatusMktmpProcess.running = true
   }
@@ -791,6 +831,7 @@ Panel {
       text = text.substring(0, 8192)
       // Mark as failed if truncated due to excessive output
       if (text.indexOf("install_failed") === -1 && text.indexOf("done") === -1) {
+        root.installWatchdog.stop()
         root.installDetachedRunning = false
         root.installRunning = false
         root.installFailed = true
@@ -821,6 +862,7 @@ Panel {
       return
     }
     if (done) {
+      root.installWatchdog.stop()
       root.installDetachedRunning = false
       root.installRunning = false
       root.installStatusPath = ""
