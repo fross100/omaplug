@@ -70,6 +70,22 @@ Panel {
 
   property string searchText: ""
   property int filterMode: 0 // 0 all, 1 omarchy, 2 third-party, 4 adna
+  property string filterKind: "" // "" all types, else a kind like bar-widget
+
+  // Kind choices derived from what is actually installed, so the dropdown
+  // only offers types the user can really filter by.
+  readonly property var kindOptions: {
+    var opts = [{ value: "", label: "All types" }]
+    var seen = {}
+    for (var i = 0; i < root.pluginRows.length; i++) {
+      var parts = String(root.pluginRows[i].kinds || "").split(", ")
+      for (var j = 0; j < parts.length; j++) {
+        var k = parts[j].trim()
+        if (k !== "" && seen[k] === undefined) { seen[k] = true; opts.push({ value: k, label: k }) }
+      }
+    }
+    return opts
+  }
 
   // Update checking state, keyed by the plugin folder name (sourceKey).
   property var updateStates: ({})
@@ -264,6 +280,7 @@ Panel {
     if (root.filterMode === 1 && !p.firstParty) return false
     if (root.filterMode === 2 && p.firstParty) return false
     if (root.filterMode === 4 && String(p.id).indexOf("adna.") !== 0) return false
+    if (root.filterKind !== "" && String(p.kinds || "").split(", ").indexOf(root.filterKind) === -1) return false
     var q = root.searchText.trim().toLowerCase()
     if (q === "") return true
     return String(p.name || "").toLowerCase().indexOf(q) !== -1
@@ -1267,6 +1284,20 @@ Panel {
             accent: Color.accent
             fontFamily: root.contentFontFamily
             onChanged: function(v) { root.filterMode = parseInt(v) }
+          }
+
+          Dropdown {
+            id: kindDropdown
+            Layout.preferredWidth: Style.space(130)
+            showLabel: false
+            value: root.filterKind
+            options: root.kindOptions
+            foreground: root.contentForeground
+            background: root.panelBackground
+            popupBorder: Util.alpha(root.contentForeground, 0.2)
+            accent: Color.accent
+            fontFamily: root.contentFontFamily
+            onChanged: function(v) { root.filterKind = v }
           }
 
           TextField {
