@@ -1381,42 +1381,12 @@ Panel {
                   elide: Label.ElideRight
                 }
 
+                // Marketplace badge + listing link on their own row under the
+                // description so the right margin stays clean.
                 RowLayout {
-                  spacing: Style.space(4)
-                  Layout.fillWidth: true
+                  visible: root.marketplaceEntry(modelData.id) !== null
+                  spacing: Style.space(6)
 
-                  Label {
-                    visible: modelData.version !== "unknown"
-                    text: "v" + modelData.version
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Label {
-                    visible: modelData.author !== ""
-                    text: "by " + modelData.author
-                    textFormat: Text.PlainText
-                    color: modelData.firstParty
-                      ? Style.selectedStateColor(root.contentForeground, Color.accent)
-                      : Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Label {
-                    visible: modelData.kinds !== ""
-                    text: "· " + modelData.kinds
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    elide: Label.ElideRight
-                  }
-
-                  // Marketplace verification badge: shown for third-party
-                  // plugins that appear in the marketplace catalog.
                   Rectangle {
                     id: marketplaceBadge
                     visible: root.marketplaceEntry(modelData.id) !== null
@@ -1461,10 +1431,8 @@ Panel {
                     }
                   }
 
-                  Item { Layout.fillWidth: true }
-
-                  // "View on marketplace" link for listed plugins, beside the
-                  // plugin-type description as requested.
+                  // "View on marketplace" link for listed plugins.
+                  Text {
                   Text {
                     visible: root.marketplaceEntry(modelData.id) !== null
                     text: "View on marketplace ↗"
@@ -1482,6 +1450,45 @@ Panel {
                       onClicked: root.openMarketplacePage(modelData.id)
                     }
                   }
+
+                  Item { Layout.fillWidth: true }
+                }
+
+                RowLayout {
+                  spacing: Style.space(4)
+                  Layout.fillWidth: true
+
+                  Label {
+                    visible: modelData.version !== "unknown"
+                    text: "v" + modelData.version
+                    textFormat: Text.PlainText
+                    color: Qt.darker(root.contentForeground, 2.0)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  Label {
+                    visible: modelData.author !== ""
+                    text: "by " + modelData.author
+                    textFormat: Text.PlainText
+                    color: modelData.firstParty
+                      ? Style.selectedStateColor(root.contentForeground, Color.accent)
+                      : Qt.darker(root.contentForeground, 2.0)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  Label {
+                    visible: modelData.kinds !== ""
+                    text: "· " + modelData.kinds
+                    textFormat: Text.PlainText
+                    color: Qt.darker(root.contentForeground, 2.0)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                    Layout.fillWidth: true
+                    elide: Label.ElideRight
+                  }
+
                 }
               }
 
