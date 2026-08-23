@@ -1487,7 +1487,7 @@ Panel {
                 spacing: Style.space(4)
 
                 RowLayout {
-                  Layout.alignment: Qt.AlignHCenter
+                  Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
                   spacing: Style.space(6)
 
                   Button {
@@ -1503,6 +1503,7 @@ Panel {
                     iconSize: Style.font.caption
                     horizontalPadding: Style.space(6)
                     verticalPadding: Style.space(3)
+                    Layout.alignment: Qt.AlignVCenter
                     onClicked: root.openPluginRepo(modelData.sourceKey)
                   }
 
@@ -1526,6 +1527,7 @@ Panel {
                     id: toggle
                     rounded: true
                     checked: modelData.enabled
+                    Layout.alignment: Qt.AlignVCenter
                     foreground: root.contentForeground
                     accent: Color.accent
                     onToggled: {
@@ -1545,6 +1547,7 @@ Panel {
                     fontSize: Style.font.bodySmall
                     horizontalPadding: Style.space(6)
                     verticalPadding: Style.space(3)
+                    Layout.alignment: Qt.AlignVCenter
                     onClicked: {
                       var btn = rowMenuButton
                       var pt = btn.mapToItem(rowMenuOverlay, 0, btn.height)
