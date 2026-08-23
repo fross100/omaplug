@@ -1364,28 +1364,8 @@ Panel {
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
-                    Layout.fillWidth: true
                     elide: Label.ElideRight
                   }
-                }
-
-                Label {
-                  text: modelData.description !== "" ? modelData.description : "No description"
-                  textFormat: Text.PlainText
-                  color: Qt.darker(root.contentForeground, 1.6)
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  Layout.fillWidth: true
-                  wrapMode: Label.Wrap
-                  maximumLineCount: 2
-                  elide: Label.ElideRight
-                }
-
-                // Marketplace badge + listing link on their own row under the
-                // description so the right margin stays clean.
-                RowLayout {
-                  visible: root.marketplaceEntry(modelData.id) !== null
-                  spacing: Style.space(6)
 
                   Rectangle {
                     id: marketplaceBadge
@@ -1430,28 +1410,20 @@ Panel {
                       }
                     }
                   }
-
-                  // "View on marketplace" link for listed plugins.
-                  Text {
-                    visible: root.marketplaceEntry(modelData.id) !== null
-                    text: "View on marketplace ↗"
-                    textFormat: Text.PlainText
-                    color: Color.accent
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: marketLinkHover.hovered
-
-                    MouseArea {
-                      id: marketLinkHover
-                      anchors.fill: parent
-                      hoverEnabled: true
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: root.openMarketplacePage(modelData.id)
-                    }
-                  }
-
-                  Item { Layout.fillWidth: true }
                 }
+
+                Label {
+                  text: modelData.description !== "" ? modelData.description : "No description"
+                  textFormat: Text.PlainText
+                  color: Qt.darker(root.contentForeground, 1.6)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  Layout.fillWidth: true
+                  wrapMode: Label.Wrap
+                  maximumLineCount: 2
+                  elide: Label.ElideRight
+                }
+
 
                 RowLayout {
                   spacing: Style.space(4)
@@ -1478,7 +1450,7 @@ Panel {
                   }
 
                   Label {
-                    visible: modelData.kinds !== ""
+                    visible: modelData.kinds !== "" && root.marketplaceEntry(modelData.id) === null
                     text: "· " + modelData.kinds
                     textFormat: Text.PlainText
                     color: Qt.darker(root.contentForeground, 2.0)
@@ -1488,6 +1460,35 @@ Panel {
                     elide: Label.ElideRight
                   }
 
+                  Label {
+                    visible: modelData.kinds !== "" && root.marketplaceEntry(modelData.id) !== null
+                    text: "· " + modelData.kinds
+                    textFormat: Text.PlainText
+                    color: Qt.darker(root.contentForeground, 2.0)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Label.ElideRight
+                  }
+
+                  Text {
+                    visible: root.marketplaceEntry(modelData.id) !== null
+                    text: "View on marketplace ↗"
+                    textFormat: Text.PlainText
+                    color: Color.accent
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                    font.underline: marketLinkHover.hovered
+
+                    MouseArea {
+                      id: marketLinkHover
+                      anchors.fill: parent
+                      hoverEnabled: true
+                      cursorShape: Qt.PointingHandCursor
+                      onClicked: root.openMarketplacePage(modelData.id)
+                    }
+                  }
+
+                  Item { Layout.fillWidth: true }
                 }
               }
 
