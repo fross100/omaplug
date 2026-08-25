@@ -553,6 +553,21 @@ Panel {
     if (url && /^https?:\/\//.test(url)) Qt.openUrlExternally(url)
   }
 
+  // Open an http(s) URL in the browser. QDesktopServices can silently no-op
+  // under some session setups, so fall back to a detached xdg-open when it
+  // reports failure.
+  property Process xdgOpenProcess: Process {}
+  function openExternal(url) {
+    var u = String(url || "")
+    if (!/^https?:\/\//.test(u)) return
+    console.log("omaplug open:", u)
+    if (!Qt.openUrlExternally(u)) {
+      console.log("omaplug openUrlExternally failed, falling back to xdg-open")
+      xdgOpenProcess.command = ["xdg-open", u]
+      xdgOpenProcess.running = true
+    }
+  }
+
   function openRowMenu(id, x, y) {
     root.rowMenuId = id
     root.rowMenuPos = { x: x, y: y }
@@ -1667,31 +1682,51 @@ Panel {
                   spacing: Style.space(6)
                   Layout.fillWidth: true
 
-                  Text {
-                    text: "View on marketplace ↗"
-                    textFormat: Text.PlainText
-                    color: Color.accent
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: marketLinkHover.hovered
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    ToolTip.text: root.marketplaceUrlFor(modelData.id)
-                    ToolTip.visible: marketLinkHover.hovered
-                    ToolTip.delay: 400
+                  // Marketplace icon: the site favicon (Lucide "cable", ISC
+                  // licensed), embedded as a transparent PNG data URI so the
+                  // panel stays self-contained, plus a trailing arrow. A plain
+                  // Item wrapper so hover/tap and the tooltip behave like the
+                  // text links above.
+                  Item {
+                    id: marketLink
+                    readonly property int _gap: 2
+                    width: marketIcon.width + marketArrow.implicitWidth + _gap
+                    height: Math.max(marketIcon.height, marketArrow.implicitHeight)
+                    Layout.alignment: Qt.AlignVCenter
+
+                    Image {
+                      id: marketIcon
+                      anchors.verticalCenter: parent.verticalCenter
+                      source: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABmJLR0QA/wD/AP+gvaeTAAADb0lEQVRYhe2WTWhcVRTHf+fNNAmh1tFQsISUErMSwUicSbOpLTSLiEUTECaTEl2JKEVU6MKvjboRFAu6cCNB7CNS0SKxWbQqtJCYSYsR6spa1Cgu2spYQup85P1d3DfT92YyHcTpqv3D4557vt+599x74TZudVg9Q08Npih1PA922vylbwGUG94H2kNH6YjNrBQabfZ2UVo/gPGAY/AD5cScHVu81iqBZAOn1Pki6DVQAbgrDPE5kKLUmQBejwWfSqcprc8A96GIYMvGqnLpg+Yvn/5vCYiesC4p5dL7Q26qJouq5tL9yL4Btm7iuw9sXrnhQfOXfmqWgBdzOD20E9PUdY6ddF91qoPKpvsi8o/C4AJ7AzruppzocRVEQDfow2bBob4CFe8wcOcN9Lfh2WHgkLK7d0HwcJj6jPn56NK8qcnMAMaTwD5ND+20j8/9tplDr27a7/zpEmIcNAoaRYwjLoV/fa8bgv6amezLTXwfr1HlxECzP2rcAwBmBfPzx6Ms5TJvA9uv5xp0Iq9KFxt8eEExIu9slkC8AtI/bqRbkRYVGKI7ptMm1FXAVkDjGL3kMnMSdzi2rYF6Ha3vb14CFe99tmw8A+wAHonVwOFPyskP2plAbAns2OJfkBxBfAZcjYiuOl5yxOm0Dw2b0PyFX4EnNPXQGPJOOGaQNf/sfDsDV+G1Vrm52LwN/weU3b0LT++4M6QK71Plhk8S2Es2+90vUf22VkDTmR4SwSJogmoHAY7WBF6woOlM7D5p7xKU7TnEPQAYXyHOIM4AJ0KNHVT0bNSkzUugQTfwB37+gIX9KzAmM6sYvcgejFq0twJmXW5k3SKHh4Ew1mM6IZpXIPCKtYMo8DY5y72umG4UIqXJzOOY1tzctiJSje+vGyVgyZ+hEtIaI3q7AQQ8VnMohQ+O4CIYGNuBL2rXSTSw6UIsTNMEAOUyC8AIbhnfIqn3ANjgBcTLof3X5uf3Ayib7sOz88C2Ji7/xux+O7r0e5XRYg/YIeCaC6RXqXCZCpcRr4TB10BP17Rnl1eRfRL5hdHYeSA7Gg3eMgHzl84RsAf4sUEozoPtNX/5YtyIKyFVMH/5lPnLp4BCnayGlm1os/mzGhsYItXzKEa1zVYoXJmz+QuND5GO4ruUOjbAIq9hm3DP+uKRVvFu49bDv15cMTlnbnc+AAAAAElFTkSuQmCC"
+                      width: 14
+                      height: 14
+                      fillMode: Image.PreserveAspectFit
+                      cache: false
+                    }
+
+                    Text {
+                      id: marketArrow
+                      x: marketIcon.width + parent._gap
+                      anchors.verticalCenter: parent.verticalCenter
+                      text: "↗"
+                      textFormat: Text.PlainText
+                      color: Color.accent
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.caption
+                    }
 
                     HoverHandler {
                       id: marketLinkHover
                       cursorShape: Qt.PointingHandCursor
                     }
 
-                    MouseArea {
-                      id: marketLinkClick
-                      anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: root.openMarketplacePage(modelData.id)
+                    TapHandler {
+                      onTapped: root.openMarketplacePage(modelData.id)
                     }
+
+                    ToolTip.text: root.marketplaceUrlFor(modelData.id)
+                    ToolTip.visible: marketLinkHover.hovered
+                    ToolTip.delay: 400
                   }
 
                   Text {
@@ -1809,8 +1844,6 @@ Panel {
                     font.pixelSize: Style.font.caption
                     font.underline: compareLinkHover.hovered
                     elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
                     ToolTip.text: pluginRowDelegate.mCompareUrl
                     ToolTip.visible: compareLinkHover.hovered
                     ToolTip.delay: 400
@@ -2236,6 +2269,7 @@ Panel {
                 }
 
                 Text {
+                  id: whatsNewLink
                   readonly property string wnUrl: root.whatsNewUrlFor(modelData.sourceKey, modelData.id)
                   visible: root.updateStates[String(modelData.sourceKey)] === "UPDATE" && wnUrl !== ""
                   text: "What's new ↗"
@@ -2256,7 +2290,7 @@ Panel {
                   MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: Qt.openUrlExternally(wnUrl)
+                    onClicked: root.openExternal(whatsNewLink.wnUrl)
                   }
                 }
               }
