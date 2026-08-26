@@ -1,12 +1,14 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
-import Quickshell.Hyprland
 import Quickshell.Io
-import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
+import "panel/Presentation.js" as Presentation
+import "panel/plugin" as Plugin
 import "panel/updates" as Updates
 
 // Plugin manager popup: lists every discovered plugin (first-party omarchy +
@@ -67,50 +69,11 @@ Panel {
     var m = reg && reg.installedPlugins ? reg.installedPlugins[id] : null
     return m ? m.__isFirstParty === true : false
   }
-  function marketplaceUrlFor(id) {
-    return "https://omarchyplugins.com/plugin.html?id=" + encodeURIComponent(String(id))
-  }
-  function openMarketplacePage(id) {
-    var e = root.marketplaceEntry(id)
-    if (e) Qt.openUrlExternally(root.marketplaceUrlFor(id))
-  }
-  function shortSha(sha) {
-    var s = String(sha || "")
-    return s.length > 7 ? s.substring(0, 7) : s
-  }
-  // Listing checks section on the marketplace plugin page.
-  function listingChecksUrlFor(id) {
-    return root.marketplaceUrlFor(id) + "#verification"
-  }
-  function openListingChecks(id) {
-    if (root.marketplaceEntry(String(id))) Qt.openUrlExternally(root.listingChecksUrlFor(id))
-  }
-  // GitHub commit page for a plugin's checked-out code.
-  function commitUrlFor(sourceKey, sha) {
-    var url = String(root.pluginRepos[sourceKey] || "")
-    if (!/^https:\/\/github\.com\//.test(url)) return ""
-    var s = String(sha || "")
-    if (s === "") return ""
-    url = url.replace(/\.git\/?$/, "").replace(/\/+$/, "")
-    return url + "/commit/" + s
-  }
-  // GitHub profile of the plugin's repository owner.
-  function authorUrlFor(sourceKey) {
-    var url = String(root.pluginRepos[sourceKey] || "")
-    var m = url.replace(/\.git\/?$/, "").match(/^https:\/\/github\.com\/([^\/]+)/)
-    return m ? "https://github.com/" + m[1] : ""
-  }
   // GitHub compare URL from the listing's snapshot-checked commit to the
   // locally installed commit. Only http(s) GitHub remotes are eligible, since
   // this URL goes to the browser.
   function compareUrlFor(sourceKey, fromSha, toSha) {
-    var url = String(root.pluginRepos[sourceKey] || "")
-    if (!/^https:\/\/github\.com\//.test(url)) return ""
-    var f = String(fromSha || "")
-    var t = String(toSha || "")
-    if (f === "" || t === "" || f === t) return ""
-    url = url.replace(/\.git\/?$/, "").replace(/\/+$/, "")
-    return url + "/compare/" + f + "..." + t
+    return Presentation.compareUrl(root.pluginRepos[sourceKey], fromSha, toSha)
   }
   // "What's new" link for a plugin with an available update: prefer the
   // marketplace release page (release notes), otherwise the GitHub compare
@@ -184,24 +147,6 @@ Panel {
       return false
     }
     return kinds.indexOf(root.filterKind) !== -1
-  }
-
-  // Friendly, comma-joined labels for a plugin's kinds (e.g. "bar-widget"
-  // -> "Bar Widget"), falling back to the raw value when unknown.
-  function kindDisplay(kindsStr) {
-    if (!kindsStr) return ""
-    var parts = String(kindsStr).split(",")
-    var out = []
-    for (var i = 0; i < parts.length; i++) {
-      var k = parts[i].trim()
-      if (k === "") continue
-      var lbl = k
-      for (var j = 0; j < root.knownKinds.length; j++) {
-        if (root.knownKinds[j].value === k) { lbl = root.knownKinds[j].label; break }
-      }
-      out.push(lbl)
-    }
-    return out.join(", ").toUpperCase()
   }
 
   // Update checking state, keyed by the plugin folder name (sourceKey).
@@ -282,10 +227,10 @@ Panel {
     interval: 45000
     repeat: false
     onTriggered: {
-      console.log("checkWatchdog timeout, process running=", updateCheckProcess.running)
+      console.log("checkWatchdog timeout, process running=", root.updateCheckProcess.running)
       if (!root.checkingUpdates) return
-      if (updateCheckProcess.running)
-        updateCheckProcess.signal(9)
+      if (root.updateCheckProcess.running)
+        root.updateCheckProcess.signal(9)
       root.checkingUpdates = false
       root.updateSummary = "Check timed out — a repository may be unreachable"
     }
@@ -306,17 +251,6 @@ Panel {
       root.installResult = "Install timed out"
       root.installStatusPath = ""
     }
-  }
-
-  function iconColorFor(name) {
-    var hash = 0
-    for (var i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0
-    var palette = [
-      "#c0392b", "#2980b9", "#27ae60", "#d35400", "#8e44ad",
-      "#16a085", "#e67e22", "#2c3e50", "#c0272f", "#21618c",
-      "#1e8449", "#b9770e", "#7d3c98", "#117a65", "#ca6f1e"
-    ]
-    return palette[Math.abs(hash) % palette.length]
   }
 
   // Pull the icon glyph straight from the plugin's live bar widget. Each
@@ -1002,9 +936,9 @@ Panel {
     repeat: true
     running: root.updateDetachedRunning && !root.updateAwaitingStart
     onTriggered: {
-      if (!updateProbeProcess.running && /^[0-9]+$/.test(root.updateProbePid)) {
-        updateProbeProcess.command = ["bash", "-c", 'kill -0 "$0" 2>/dev/null', root.updateProbePid]
-        updateProbeProcess.running = true
+      if (!root.updateProbeProcess.running && /^[0-9]+$/.test(root.updateProbePid)) {
+        root.updateProbeProcess.command = ["bash", "-c", 'kill -0 "$0" 2>/dev/null', root.updateProbePid]
+        root.updateProbeProcess.running = true
       }
     }
   }
@@ -1188,8 +1122,8 @@ Panel {
         + "if [ $rc -ne 0 ]; then exit 1; fi; "
         + "' -- \"$0\" \"$1\" >/dev/null 2>&1 &",
         root._installPendingUrl, p]
-      installLaunchProcess.command = launch
-      installLaunchProcess.running = true
+      root.installLaunchProcess.command = launch
+      root.installLaunchProcess.running = true
     }
   }
 
@@ -1739,631 +1673,48 @@ Panel {
             }
           }
 
-          delegate: Item {
-            id: rowWrapper
-            required property var modelData
-            required property int index
+          delegate: Plugin.Row {
+            id: pluginRow
+
             width: pluginList.width
-            height: pluginRowDelegate.height + Style.space(9)
+            rowCount: pluginList.count
+            marketplaceEntry: pluginRow.modelData.firstParty
+              ? null
+              : (root.marketplaceMap[String(pluginRow.modelData.id)] || null)
+            localCommit: root.pluginCommits[String(pluginRow.modelData.sourceKey)] || ""
+            repoUrl: root.pluginRepos[String(pluginRow.modelData.sourceKey)] || ""
+            repoKnown: root.pluginRepos[String(pluginRow.modelData.sourceKey)] !== undefined
+            updateState: String(root.updateStates[String(pluginRow.modelData.sourceKey)] || "")
+            removeSelectMode: root.removeSelectMode
+            selectedForRemoval: root.removeSelection[pluginRow.modelData.id] === true
+            removingPlugin: root.removingPlugin
+            pluginEnabled: root.pluginEnabled(pluginRow.modelData.id)
+            updateRunning: root.updateDetachedRunning
+            updatingId: root.updatingId
+            icon: root.iconFor(pluginRow.modelData.id)
+            knownKinds: root.knownKinds
+            foreground: root.contentForeground
+            fontFamily: root.contentFontFamily
 
-            Rectangle {
-            id: pluginRowDelegate
-            readonly property bool mFirstParty: modelData.firstParty === true
-            readonly property var mEntry: mFirstParty ? null : (root.marketplaceMap[String(modelData.id)] || null)
-            readonly property bool mListed: mEntry !== null
-            readonly property bool mVerified: mListed && mEntry.verified === true
-            // Marketplace listing snapshot check commit vs installed code.
-            readonly property string mSnapshotCommit: mListed && typeof mEntry.snapshotCommit === "string" ? mEntry.snapshotCommit : ""
-            readonly property string mLocalCommit: root.pluginCommits[String(modelData.sourceKey)] || ""
-            readonly property bool mCommitKnown: mSnapshotCommit !== "" && mLocalCommit !== ""
-            readonly property bool mCommitMatches: mCommitKnown && mSnapshotCommit === mLocalCommit
-            readonly property string mCompareUrl: root.compareUrlFor(modelData.sourceKey, mSnapshotCommit, mLocalCommit)
-            readonly property string mSnapshotUrl: root.commitUrlFor(modelData.sourceKey, mSnapshotCommit)
-            readonly property string mLocalUrl: root.commitUrlFor(modelData.sourceKey, mLocalCommit)
-            readonly property string mAuthorUrl: modelData.firstParty ? "" : root.authorUrlFor(modelData.sourceKey)
-            // True when the bottom action row has a visible button, so the
-            // row can collapse entirely (and stop shifting the top row off
-            // center) for plugins that have no source/update control.
-            readonly property bool mShowSourceRow: (modelData.updatable && root.pluginRepos[String(modelData.sourceKey)] !== undefined) || (modelData.updatable && root.updateStates[String(modelData.sourceKey)] === "UPDATE")
-            width: parent.width
-            height: Math.max(Style.space(56),
-              Math.min(row.implicitHeight + Style.space(22), Style.space(120)))
-            clip: true
-            radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
-            color: hover.hovered
-              ? Style.hoverFillFor(root.contentForeground, Color.accent)
-              : "transparent"
-
-            RowLayout {
-              id: row
-              anchors.fill: parent
-              anchors.leftMargin: Style.space(10)
-              anchors.topMargin: Style.space(10)
-              anchors.rightMargin: Style.space(10)
-              anchors.bottomMargin: Style.space(10)
-              spacing: Style.space(10)
-
-              Button {
-                visible: root.removeSelectMode
-                text: root.removeSelection[modelData.id] === true ? "\uf14a" : "\uf0c8"
-                tooltipText: "Select plugin for removal"
-                enabled: !root.removingPlugin
-                Layout.alignment: Qt.AlignVCenter
-                foreground: root.contentForeground
-                accent: Color.accent
-                fontFamily: root.contentFontFamily
-                fontSize: Style.font.bodySmall
-                horizontalPadding: Style.space(6)
-                verticalPadding: Style.space(3)
-                onClicked: root.toggleRemoveSelection(modelData.id)
-              }
-
-              Rectangle {
-                id: pluginIcon
-                width: Style.space(28)
-                height: width
-                radius: 6
-                color: root.iconColorFor(modelData.name)
-
-                Text {
-                  anchors.centerIn: parent
-                  text: root.iconFor(modelData.id) || modelData.name.trim().charAt(0).toUpperCase()
-                  textFormat: Text.PlainText
-                  color: "white"
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  font.bold: true
-                }
-              }
-
-              ColumnLayout {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignVCenter
-                spacing: Style.space(2)
-
-                RowLayout {
-                  Layout.fillWidth: true
-                  spacing: Style.space(8)
-
-                  Label {
-                    id: pluginNameLabel
-                    text: modelData.name
-                    textFormat: Text.PlainText
-                    color: root.contentForeground
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.body
-                    font.bold: true
-                    // Size to the name's content so the badge/version hug the
-                    // name (right after it), not the far-right edge.
-                    // minimumWidth 0 lets it shrink + elide instead of pushing
-                    // the action column out when the name is very long (#4).
-                    Layout.minimumWidth: 0
-                    elide: Label.ElideRight
-                  }
-
-                  Rectangle {
-                    id: marketplaceBadge
-                    visible: pluginRowDelegate.mListed
-                    radius: height / 2
-                    implicitWidth: badgeRow.implicitWidth + Style.space(10)
-                    implicitHeight: Style.space(16)
-                    color: pluginRowDelegate.mVerified
-                      ? Util.alpha(Color.accent, 0.18)
-                      : Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.08)
-
-                    Row {
-                      id: badgeRow
-                      anchors.centerIn: parent
-                      spacing: Style.space(3)
-
-                      Text {
-                        visible: pluginRowDelegate.mVerified
-                        text: "\uf058"
-                        textFormat: Text.PlainText
-                        color: Color.accent
-                        font.family: root.contentFontFamily
-                        font.pixelSize: Style.font.caption - 1
-                        anchors.verticalCenter: parent.verticalCenter
-                      }
-
-                      Text {
-                        text: pluginRowDelegate.mVerified
-                          ? "Verified"
-                          : "Unverified"
-                        textFormat: Text.PlainText
-                        color: pluginRowDelegate.mVerified
-                          ? Color.accent
-                          : Qt.darker(root.contentForeground, 2.0)
-                        font.family: root.contentFontFamily
-                        font.pixelSize: Style.font.caption - 1
-                        anchors.verticalCenter: parent.verticalCenter
-                      }
-                    }
-                  }
-
-                  Label {
-                    visible: modelData.version !== "unknown"
-                    text: "v" + modelData.version
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-                }
-
-                Label {
-                  text: modelData.description !== "" ? modelData.description : "No description"
-                  textFormat: Text.PlainText
-                  color: Qt.darker(root.contentForeground, 1.6)
-                  font.family: root.contentFontFamily
-                  font.pixelSize: Style.font.bodySmall
-                  Layout.fillWidth: true
-                  Layout.minimumWidth: 0
-                  wrapMode: Label.Wrap
-                  maximumLineCount: 2
-                  elide: Label.ElideRight
-                }
-
-                // Creator line under the description, linking to the
-                // repository owner's GitHub profile when derivable, with
-                // the plugin kind on the same line.
-                 RowLayout {
-                   visible: modelData.author !== ""
-                   spacing: Style.space(6)
-                   Layout.fillWidth: true
-
-                    Text {
-                      text: "by " + modelData.author + (pluginRowDelegate.mAuthorUrl !== "" ? " ↗" : "")
-                      Layout.minimumWidth: 0
-                      elide: Text.ElideRight
-                    textFormat: Text.PlainText
-                    color: pluginRowDelegate.mAuthorUrl !== ""
-                      ? Color.accent
-                      : Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: authorLinkHover.hovered && pluginRowDelegate.mAuthorUrl !== ""
-
-                    ToolTip.text: pluginRowDelegate.mAuthorUrl !== "" ? pluginRowDelegate.mAuthorUrl : ("by " + modelData.author)
-                    ToolTip.visible: authorLinkHover.hovered
-                    ToolTip.delay: 400
-
-                    HoverHandler {
-                      id: authorLinkHover
-                      cursorShape: pluginRowDelegate.mAuthorUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    }
-
-                     MouseArea {
-                       anchors.fill: parent
-                       enabled: pluginRowDelegate.mAuthorUrl !== ""
-                       cursorShape: Qt.PointingHandCursor
-                       onClicked: Qt.openUrlExternally(pluginRowDelegate.mAuthorUrl)
-                     }
-                   }
-
-                   Text {
-                     visible: root.kindDisplay(modelData.kinds) !== ""
-                     text: "·"
-                     textFormat: Text.PlainText
-                     color: Qt.darker(root.contentForeground, 2.0)
-                     font.family: root.contentFontFamily
-                     font.pixelSize: Style.font.caption
-                   }
-
-                   Label {
-                     visible: root.kindDisplay(modelData.kinds) !== ""
-                     text: root.kindDisplay(modelData.kinds)
-                     textFormat: Text.PlainText
-                     color: Qt.darker(root.contentForeground, 2.0)
-                     font.family: root.contentFontFamily
-                     font.pixelSize: Style.font.caption
-                     elide: Label.ElideRight
-                     Layout.minimumWidth: 0
-                     Layout.alignment: Qt.AlignRight
-                   }
-
-                   Item {
-                     Layout.fillWidth: true
-                     Layout.preferredHeight: 1
-                   }
-                 }
-
-                // Marketplace listing links on their own line under the
-                // description row, pipe-separated: the listing page, the
-                // snapshot-checked commit (linked), the installed commit when
-                // it has moved on, and the listing checks page. The text
-                // links flex and elide so this line never pushes the action
-                // buttons off the right edge.
-                RowLayout {
-                  visible: pluginRowDelegate.mListed
-                  spacing: Style.space(6)
-                  Layout.fillWidth: true
-
-                  // Marketplace icon: the site favicon (Lucide "cable", ISC
-                  // licensed), embedded as a transparent PNG data URI so the
-                  // panel stays self-contained, plus a trailing arrow. A plain
-                  // Item wrapper so hover/tap and the tooltip behave like the
-                  // text links above.
-                  Item {
-                    id: marketLink
-                    readonly property int _gap: 2
-                    width: marketIcon.width + marketArrow.implicitWidth + _gap
-                    height: Math.max(marketIcon.height, marketArrow.implicitHeight)
-                    Layout.alignment: Qt.AlignVCenter
-
-                    Image {
-                      id: marketIcon
-                      anchors.verticalCenter: parent.verticalCenter
-                      source: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABmJLR0QA/wD/AP+gvaeTAAADb0lEQVRYhe2WTWhcVRTHf+fNNAmh1tFQsISUErMSwUicSbOpLTSLiEUTECaTEl2JKEVU6MKvjboRFAu6cCNB7CNS0SKxWbQqtJCYSYsR6spa1Cgu2spYQup85P1d3DfT92YyHcTpqv3D4557vt+599x74TZudVg9Q08Npih1PA922vylbwGUG94H2kNH6YjNrBQabfZ2UVo/gPGAY/AD5cScHVu81iqBZAOn1Pki6DVQAbgrDPE5kKLUmQBejwWfSqcprc8A96GIYMvGqnLpg+Yvn/5vCYiesC4p5dL7Q26qJouq5tL9yL4Btm7iuw9sXrnhQfOXfmqWgBdzOD20E9PUdY6ddF91qoPKpvsi8o/C4AJ7AzruppzocRVEQDfow2bBob4CFe8wcOcN9Lfh2WHgkLK7d0HwcJj6jPn56NK8qcnMAMaTwD5ND+20j8/9tplDr27a7/zpEmIcNAoaRYwjLoV/fa8bgv6amezLTXwfr1HlxECzP2rcAwBmBfPzx6Ms5TJvA9uv5xp0Iq9KFxt8eEExIu9slkC8AtI/bqRbkRYVGKI7ptMm1FXAVkDjGL3kMnMSdzi2rYF6Ha3vb14CFe99tmw8A+wAHonVwOFPyskP2plAbAns2OJfkBxBfAZcjYiuOl5yxOm0Dw2b0PyFX4EnNPXQGPJOOGaQNf/sfDsDV+G1Vrm52LwN/weU3b0LT++4M6QK71Plhk8S2Es2+90vUf22VkDTmR4SwSJogmoHAY7WBF6woOlM7D5p7xKU7TnEPQAYXyHOIM4AJ0KNHVT0bNSkzUugQTfwB37+gIX9KzAmM6sYvcgejFq0twJmXW5k3SKHh4Ew1mM6IZpXIPCKtYMo8DY5y72umG4UIqXJzOOY1tzctiJSje+vGyVgyZ+hEtIaI3q7AQQ8VnMohQ+O4CIYGNuBL2rXSTSw6UIsTNMEAOUyC8AIbhnfIqn3ANjgBcTLof3X5uf3Ayib7sOz88C2Ji7/xux+O7r0e5XRYg/YIeCaC6RXqXCZCpcRr4TB10BP17Rnl1eRfRL5hdHYeSA7Gg3eMgHzl84RsAf4sUEozoPtNX/5YtyIKyFVMH/5lPnLp4BCnayGlm1os/mzGhsYItXzKEa1zVYoXJmz+QuND5GO4ruUOjbAIq9hm3DP+uKRVvFu49bDv15cMTlnbnc+AAAAAElFTkSuQmCC"
-                      width: 14
-                      height: 14
-                      fillMode: Image.PreserveAspectFit
-                      cache: false
-                    }
-
-                    Text {
-                      id: marketArrow
-                      x: marketIcon.width + parent._gap
-                      anchors.verticalCenter: parent.verticalCenter
-                      text: "↗"
-                      textFormat: Text.PlainText
-                      color: Color.accent
-                      font.family: root.contentFontFamily
-                      font.pixelSize: Style.font.caption
-                    }
-
-                    HoverHandler {
-                      id: marketLinkHover
-                      cursorShape: Qt.PointingHandCursor
-                    }
-
-                    TapHandler {
-                      onTapped: root.openMarketplacePage(modelData.id)
-                    }
-
-                    ToolTip.text: root.marketplaceUrlFor(modelData.id)
-                    ToolTip.visible: marketLinkHover.hovered
-                    ToolTip.delay: 400
-                  }
-
-                  Text {
-                    text: "|"
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.4)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Text {
-                    visible: pluginRowDelegate.mSnapshotCommit !== ""
-                    text: "\uDB81\uDF91 " + root.shortSha(pluginRowDelegate.mSnapshotCommit)
-                    textFormat: Text.PlainText
-                    color: pluginRowDelegate.mCommitMatches ? Color.accent : Qt.darker(root.contentForeground, 1.6)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: snapLinkHover.hovered && pluginRowDelegate.mSnapshotUrl !== ""
-
-                    ToolTip.text: pluginRowDelegate.mSnapshotUrl !== ""
-                      ? pluginRowDelegate.mSnapshotUrl
-                      : pluginRowDelegate.mSnapshotCommit
-                    ToolTip.visible: snapLinkHover.hovered
-                    ToolTip.delay: 400
-
-                    HoverHandler {
-                      id: snapLinkHover
-                      cursorShape: pluginRowDelegate.mSnapshotUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    }
-
-                    MouseArea {
-                      anchors.fill: parent
-                      enabled: pluginRowDelegate.mSnapshotUrl !== ""
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: Qt.openUrlExternally(pluginRowDelegate.mSnapshotUrl)
-                    }
-                  }
-
-                  Text {
-                    // Listing has no snapshot commit yet: fall back to
-                    // linking the locally installed code commit alone.
-                    visible: pluginRowDelegate.mSnapshotCommit === "" && pluginRowDelegate.mLocalCommit !== ""
-                    text: "\uDB81\uDF91 " + root.shortSha(pluginRowDelegate.mLocalCommit) + (pluginRowDelegate.mLocalUrl !== "" ? " ↗" : "")
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 1.6)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: localOnlyLinkHover.hovered && pluginRowDelegate.mLocalUrl !== ""
-
-                    HoverHandler {
-                      id: localOnlyLinkHover
-                      cursorShape: pluginRowDelegate.mLocalUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    }
-
-                    MouseArea {
-                      anchors.fill: parent
-                      enabled: pluginRowDelegate.mLocalUrl !== ""
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: Qt.openUrlExternally(pluginRowDelegate.mLocalUrl)
-                    }
-                  }
-
-                  Text {
-                    visible: pluginRowDelegate.mSnapshotCommit !== "" && pluginRowDelegate.mLocalCommit !== "" && !pluginRowDelegate.mCommitMatches
-                    text: "→"
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Text {
-                    visible: pluginRowDelegate.mSnapshotCommit !== "" && pluginRowDelegate.mLocalCommit !== "" && !pluginRowDelegate.mCommitMatches
-                    text: root.shortSha(pluginRowDelegate.mLocalCommit) + (pluginRowDelegate.mLocalUrl !== "" ? " ↗" : "")
-                    textFormat: Text.PlainText
-                    color: Color.accent
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: localLinkHover.hovered && pluginRowDelegate.mLocalUrl !== ""
-
-                    ToolTip.text: pluginRowDelegate.mLocalUrl !== ""
-                      ? pluginRowDelegate.mLocalUrl
-                      : pluginRowDelegate.mLocalCommit
-                    ToolTip.visible: localLinkHover.hovered
-                    ToolTip.delay: 400
-
-                    HoverHandler {
-                      id: localLinkHover
-                      cursorShape: pluginRowDelegate.mLocalUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    }
-
-                    MouseArea {
-                      anchors.fill: parent
-                      enabled: pluginRowDelegate.mLocalUrl !== ""
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: Qt.openUrlExternally(pluginRowDelegate.mLocalUrl)
-                    }
-                  }
-
-                  Text {
-                    visible: pluginRowDelegate.mCompareUrl !== ""
-                    text: "|"
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.4)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Text {
-                    visible: pluginRowDelegate.mCompareUrl !== ""
-                    text: "view changes ↗"
-                    textFormat: Text.PlainText
-                    color: Color.accent
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: compareLinkHover.hovered
-                    elide: Text.ElideRight
-                    ToolTip.text: pluginRowDelegate.mCompareUrl
-                    ToolTip.visible: compareLinkHover.hovered
-                    ToolTip.delay: 400
-
-                    HoverHandler {
-                      id: compareLinkHover
-                      cursorShape: Qt.PointingHandCursor
-                    }
-
-                    MouseArea {
-                      anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: Qt.openUrlExternally(pluginRowDelegate.mCompareUrl)
-                    }
-                  }
-
-                  Text {
-                    text: "|"
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.4)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Text {
-                    text: "Listing checks ↗"
-                    textFormat: Text.PlainText
-                    color: Color.accent
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    font.underline: checksLinkHover.hovered
-                    elide: Text.ElideRight
-                    Layout.fillWidth: true
-                    Layout.minimumWidth: 0
-                    ToolTip.text: root.listingChecksUrlFor(modelData.id)
-                    ToolTip.visible: checksLinkHover.hovered
-                    ToolTip.delay: 400
-
-                    HoverHandler {
-                      id: checksLinkHover
-                      cursorShape: Qt.PointingHandCursor
-                    }
-
-                    MouseArea {
-                      anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: root.openListingChecks(modelData.id)
-                    }
-                  }
-                }
-              }
-
-              // Action column pinned to the right edge of every row; the
-              // text columns absorb any width pressure so these controls
-              // always stay flush right. Toggle + more-actions on top,
-              // source / update buttons stacked underneath.
-              ColumnLayout {
-                Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                spacing: Style.space(4)
-
-                RowLayout {
-                  // Toggle and more-actions sit adjacent, flush right.
-                  Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
-                  spacing: Style.space(6)
-
-                  // Inline switch: solid accent track when ON so it reads the
-                  // same as the accent-colored author / "View on marketplace"
-                  // links (ToggleSwitch's fill is too faint at 0.18 alpha).
-                  // Gated like the PR's native toggle: bar options that are
-                  // active cannot be switched off directly.
-                  Item {
-                    id: toggle
-                    readonly property bool checked: root.pluginEnabled(rowWrapper.modelData.id)
-                    readonly property bool canToggle: rowWrapper.modelData.canDisable || !toggle.checked
-                    readonly property int _h: Math.max(22, Math.round(Style.spacing.controlHeight * 0.55))
-                    readonly property int _w: Math.round(_h * 1.9)
-                    readonly property int _k: Math.max(6, Math.round(_h * 0.72))
-                    readonly property int _inset: Math.max(1, Math.round((_h - _k) / 2))
-                    implicitWidth: _w
-                    implicitHeight: _h
-                    opacity: canToggle ? 1 : 0.4
-                    Layout.alignment: Qt.AlignVCenter
-
-                    Rectangle {
-                      width: toggle._w
-                      height: toggle._h
-                      radius: Style.cornerRadius > 0 ? height / 2 : 0
-                      color: toggle.checked
-                        ? Color.accent
-                        : Style.normalFillFor(root.contentForeground, Color.accent)
-                      Behavior on color { ColorAnimation { duration: 120 } }
-
-                      Rectangle {
-                        width: toggle._k
-                        height: toggle._k
-                        radius: Style.cornerRadius > 0 ? height / 2 : 0
-                        x: toggle.checked ? toggle._w - width - toggle._inset : toggle._inset
-                        anchors.verticalCenter: parent.verticalCenter
-                        color: toggle.checked ? Color.background : Qt.darker(root.contentForeground, 1.25)
-                        Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
-                        Behavior on color { ColorAnimation { duration: 120 } }
-                      }
-                    }
-
-                    MouseArea {
-                      anchors.fill: parent
-                      cursorShape: toggle.canToggle ? Qt.PointingHandCursor : Qt.ArrowCursor
-                      onClicked: {
-                        if (!toggle.canToggle) return
-                        Qt.callLater(function() { root.setPluginEnabled(rowWrapper.modelData.id, !toggle.checked) })
-                      }
-                    }
-                  }
-
-                  Button {
-                    id: rowMenuButton
-                    iconText: "\uf142"
-                    tooltipText: "More actions"
-                    visible: !modelData.firstParty
-                    bordered: true
-                    // Keep the idle border but drop it while hovered.
-                    borderSpec: hot ? Border.none()
-                      : Border.controlSpec("normal", foreground, Color.accent)
-                    foreground: root.contentForeground
-                    accent: Color.accent
-                    fontFamily: root.contentFontFamily
-                    fontSize: Style.font.bodySmall
-                    horizontalPadding: Style.space(6)
-                    verticalPadding: Style.space(3)
-                    Layout.alignment: Qt.AlignVCenter
-                    onClicked: {
-                      var btn = rowMenuButton
-                      var pt = btn.mapToItem(rowMenuOverlay, 0, btn.height)
-                      root.openRowMenu(modelData.id, pt.x, pt.y)
-                    }
-                  }
-                }
-
-                RowLayout {
-                  // Collapse completely when no source/update button shows,
-                  // so the toggle/more-actions pair stays vertically centered.
-                  visible: pluginRowDelegate.mShowSourceRow
-                  Layout.fillWidth: true
-                  spacing: Style.space(6)
-
-                  Button {
-                    visible: modelData.updatable
-                      && root.pluginRepos[modelData.sourceKey] !== undefined
-                    tooltipText: "Open plugin repository"
-                    text: "SOURCE \udb85\udd94"
-                    bordered: true
-                    // Keep the idle border but drop it while hovered.
-                    borderSpec: hot ? Border.none()
-                      : Border.controlSpec("normal", foreground, Color.accent)
-                    foreground: root.contentForeground
-                    accent: Color.accent
-                    fontFamily: root.contentFontFamily
-                    fontSize: Style.font.caption
-                    iconSize: Style.font.caption
-                    horizontalPadding: Style.space(6)
-                    verticalPadding: Style.space(3)
-                    Layout.fillWidth: true
-                    onClicked: root.openPluginRepo(modelData.sourceKey)
-                  }
-
-                  Button {
-                    visible: modelData.updatable
-                      && root.updateStates[modelData.sourceKey] === "UPDATE"
-                    text: root.updatingId === modelData.sourceKey ? "Updating…" : "Update"
-                    enabled: !root.updateDetachedRunning
-                    bordered: true
-                    // Keep the idle border but drop it while hovered.
-                    borderSpec: hot ? Border.none()
-                      : Border.controlSpec("normal", foreground, Color.accent)
-                    foreground: root.contentForeground
-                    accent: Color.accent
-                    fontFamily: root.contentFontFamily
-                    fontSize: Style.font.caption
-                    horizontalPadding: Style.space(8)
-                    verticalPadding: Style.space(3)
-                    Layout.fillWidth: true
-                    onClicked: root.updatePlugin(modelData.sourceKey)
-                  }
-                }
-              }
+            onRemovalSelectionRequested: function(pluginId) {
+              root.toggleRemoveSelection(pluginId)
             }
-
-            // Row hover background: a HoverHandler (not a MouseArea) so the row
-            // highlight never swallows hover from the toggle/update buttons —
-            // otherwise their cursor shape and hover visuals wouldn't work.
-            HoverHandler {
-              id: hover
+            onEnabledChangeRequested: function(pluginId, enabled) {
+              root.setPluginEnabled(pluginId, enabled)
             }
-
-            // Right-click opens a context menu with enable/disable, source, remove.
-            TapHandler {
-              id: rowContextTap
-              acceptedButtons: Qt.RightButton
-              onTapped: function(event) {
-                var pt = rowContextTap.mapToItem(rowMenuOverlay, event.point.position.x, event.point.position.y)
-                root.openRowMenu(modelData.id, pt.x, pt.y)
-              }
-            }
-
-            }
-
-            // Divider floats in the gap between row cards, never over text.
-            Rectangle {
-              visible: index < pluginList.count - 1
-              anchors.top: pluginRowDelegate.bottom
-              anchors.topMargin: Style.space(4)
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.leftMargin: Style.space(10)
-              anchors.rightMargin: Style.space(10)
-              height: 1
-              color: Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.12)
+            onOpenUrlRequested: function(url) { Qt.openUrlExternally(url) }
+            onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
+            onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
+            onMenuRequested: function(pluginId, sourceItem, x, y) {
+              var point = sourceItem.mapToItem(rowMenuOverlay, x, y)
+              root.openRowMenu(pluginId, point.x, point.y)
             }
           }
         }
 
         RowLayout {
           Layout.fillWidth: true
+
           spacing: Style.space(8)
 
           Label {
@@ -2421,7 +1772,6 @@ Panel {
       pendingCount: root.pendingUpdateCount
       summary: root.updateSummary
       iconFor: root.iconFor
-      iconColorFor: root.iconColorFor
       whatsNewUrlFor: root.whatsNewUrlFor
 
       onCloseRequested: root.updatesPageOpen = false

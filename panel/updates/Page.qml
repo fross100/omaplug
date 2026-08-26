@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
+import "../Presentation.js" as Presentation
 
 Rectangle {
   id: page
@@ -24,7 +25,6 @@ Rectangle {
   required property string summary
 
   required property var iconFor
-  required property var iconColorFor
   required property var whatsNewUrlFor
 
   signal closeRequested
@@ -176,7 +176,7 @@ Rectangle {
                   Layout.preferredWidth: Style.space(28)
                   Layout.preferredHeight: Layout.preferredWidth
                   radius: 6
-                  color: page.iconColorFor(updateRow.modelData.name)
+                  color: Presentation.iconColor(updateRow.modelData.name)
 
                   Text {
                     anchors.centerIn: parent
