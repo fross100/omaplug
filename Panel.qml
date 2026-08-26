@@ -200,7 +200,7 @@ Panel {
       }
       out.push(lbl)
     }
-    return out.join(", ")
+    return out.join(", ").toUpperCase()
   }
 
   // Update checking state, keyed by the plugin folder name (sourceKey).
@@ -1975,20 +1975,11 @@ Panel {
                      Layout.alignment: Qt.AlignRight
                    }
 
-                  Text {
-                    visible: modelData.kinds !== ""
-                    text: "· " + modelData.kinds
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
-
-                  Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                  }
-                }
+                   Item {
+                     Layout.fillWidth: true
+                     Layout.preferredHeight: 1
+                   }
+                 }
 
                 // Marketplace listing links on their own line under the
                 // description row, pipe-separated: the listing page, the
