@@ -1847,6 +1847,17 @@ Panel {
                   spacing: Style.space(8)
 
                   Label {
+                    visible: root.kindDisplay(modelData.kinds) !== ""
+                    text: root.kindDisplay(modelData.kinds)
+                    textFormat: Text.PlainText
+                    color: Qt.darker(root.contentForeground, 2.0)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Label.ElideRight
+                    Layout.minimumWidth: 0
+                  }
+
+                  Label {
                     id: pluginNameLabel
                     text: modelData.name
                     textFormat: Text.PlainText
@@ -1854,8 +1865,8 @@ Panel {
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
-                    // Size to the name's content so the badge/version/type hug
-                    // the name (right after it), not the far-right edge.
+                    // Size to the name's content so the badge/version hug the
+                    // name (right after it), not the far-right edge.
                     // minimumWidth 0 lets it shrink + elide instead of pushing
                     // the action column out when the name is very long (#4).
                     Layout.minimumWidth: 0
@@ -1909,17 +1920,6 @@ Panel {
                     color: Qt.darker(root.contentForeground, 2.0)
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.caption
-                  }
-
-                  Label {
-                    visible: root.kindDisplay(modelData.kinds) !== ""
-                    text: root.kindDisplay(modelData.kinds)
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    elide: Label.ElideRight
-                    Layout.minimumWidth: 0
                   }
                 }
 
