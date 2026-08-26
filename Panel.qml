@@ -1854,11 +1854,10 @@ Panel {
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
-                    // Take the row's slack and elide; minimumWidth 0 lets the
-                    // layout squeeze this instead of pushing the action column
-                    // out when the name is very long (issue #4). The badge,
-                    // version, and type hug the right side of the name row.
-                    Layout.fillWidth: true
+                    // Size to the name's content so the badge/version/type hug
+                    // the name (right after it), not the far-right edge.
+                    // minimumWidth 0 lets it shrink + elide instead of pushing
+                    // the action column out when the name is very long (#4).
                     Layout.minimumWidth: 0
                     elide: Label.ElideRight
                   }
