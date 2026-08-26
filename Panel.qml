@@ -8,6 +8,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "panel/Presentation.js" as Presentation
+import "panel/dialogs" as Dialogs
 import "panel/plugin" as Plugin
 import "panel/updates" as Updates
 
@@ -183,8 +184,8 @@ Panel {
   property bool installRunning: false
   property bool installFailed: false
   property string installResult: ""
-  // Confirm popup shown before running install: ask whether to enable the
-  // freshly installed plugin. installPendingUrl carries the extracted URL.
+  // Confirm popup shown before running install: makes the disabled-by-default
+  // policy explicit. installPendingUrl carries the extracted URL.
   property bool installConfirmOpen: false
   property string installPendingUrl: ""
   // Status file for the detached installer. The file is created securely
@@ -216,7 +217,6 @@ Panel {
       root.installRunning = false
       root.installFailed = false
       root.installResult = ""
-      Qt.callLater(function() { installUrlField.forceActiveFocus() })
     } else {
       root.installConfirmOpen = false
       root.installPendingUrl = ""
@@ -1026,19 +1026,13 @@ Panel {
     return ""
   }
 
-  // `--enable` in a pasted command is honored: the plugin is enabled after
-  // install, matching `omarchy plugin add <url> --enable`.
-  function installCommandHasEnable(text) {
-    return /\s--enable\b/.test(" " + String(text || "").trim())
-  }
-
   // Called from the install dialog: extract the URL and ask for
   // confirmation. Only GitHub URLs are accepted (https://github.com/owner/repo
   // or git@github.com:owner/repo.git), matching omarchy plugin/theme
   // expectations and preventing arbitrary host installs. The plugin is
   // installed but NOT enabled by default.
-  function requestInstall() {
-    var raw = String(installUrlField.text || "").trim()
+  function requestInstall(rawText) {
+    var raw = String(rawText || "").trim()
     if (raw === "") return
     var url = root.extractInstallUrl(raw)
     if (url === "") {
@@ -1064,7 +1058,7 @@ Panel {
 
   // Launch the detached helper. `omarchy plugin add` reloads plugins when it
   // finishes, which unloads this panel; the helper is started with
-  // setsid/nohup so it survives and finishes the enable itself.
+  // setsid/nohup so it survives and finishes the installation itself.
   // The status file is created securely via mktemp to avoid predictable /tmp
   // symlink races (the helper truncates it, so creation must be exclusive).
   property string _installPendingUrl: ""
@@ -1806,378 +1800,81 @@ Panel {
       onRemovalRequested: function(pluginId) { root.removePlugin(pluginId) }
     }
 
-    // Confirmation before any plugin removal. Shows what is about to be deleted
-    // (single plugin or a multi-selection count) with a Remove / Cancel choice.
-    Rectangle {
-      id: removeConfirmDialog
-      visible: root.removeConfirmOpen
+    Dialogs.Confirm {
       anchors.fill: parent
       z: 7000
-      color: Util.alpha(root.panelBackground, 0.7)
-      focus: true
-      Keys.priority: Keys.BeforeItem
-      Keys.onEscapePressed: {
-        if (!root.removingPlugin) root.removeConfirmOpen = false
-      }
 
-      MouseArea {
-        anchors.fill: parent
-        onClicked: {
-          if (!root.removingPlugin) root.removeConfirmOpen = false
-        }
-      }
+      open: root.removeConfirmOpen
+      title: root.removePending.length > 1
+        ? "Remove " + root.removePending.length + " plugins?"
+        : "Remove this plugin?"
+      message: root.removePending.length > 1
+        ? "The selected plugins will be deleted from your config. This cannot be undone."
+        : "\"" + (root.removePending.length === 1 ? root.removePending[0] : "") + "\" will be deleted from your config. This cannot be undone."
+      confirmText: "Remove"
+      dismissEnabled: !root.removingPlugin
+      borderColor: Color.urgent
+      confirmForeground: Color.urgent
+      confirmAccent: Color.urgent
+      confirmBordered: true
+      titleWrapMode: Text.WordWrap
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
 
-      Rectangle {
-        id: removeConfirmCard
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Style.space(32), Style.space(360))
-        height: removeConfirmColumn.implicitHeight + Style.space(36)
-        color: root.panelBackground
-        radius: Style.cornerRadius
-        border.color: Color.urgent
-        border.width: 1
-
-        ColumnLayout {
-          id: removeConfirmColumn
-          anchors.fill: parent
-          anchors.margins: Style.space(18)
-          spacing: Style.space(12)
-
-          Text {
-            text: root.removePending.length > 1
-              ? "Remove " + root.removePending.length + " plugins?"
-              : "Remove this plugin?"
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.title
-            font.bold: true
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          Text {
-            text: root.removePending.length > 1
-              ? "The selected plugins will be deleted from your config. This cannot be undone."
-              : "\"" + (root.removePending.length === 1 ? root.removePending[0] : "") + "\" will be deleted from your config. This cannot be undone."
-            textFormat: Text.PlainText
-            color: Qt.darker(root.contentForeground, 1.6)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.bodySmall
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-              text: "Cancel"
-              foreground: root.contentForeground
-              accent: Color.accent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.cancelRemove()
-            }
-
-            Button {
-              text: "Remove"
-              bordered: true
-              foreground: Color.urgent
-              accent: Color.urgent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.confirmRemove()
-            }
-          }
-        }
-      }
+      onCancelRequested: root.cancelRemove()
+      onConfirmRequested: root.confirmRemove()
     }
 
-    // Confirmation before restarting the shell. Warns that the shell (and this
-    // panel) will briefly disappear while plugins reload from source.
-    Rectangle {
-      id: restartConfirmDialog
-      visible: root.restartConfirmOpen
+    Dialogs.Confirm {
       anchors.fill: parent
       z: 7000
-      color: Util.alpha(root.panelBackground, 0.7)
-      focus: true
-      Keys.priority: Keys.BeforeItem
-      Keys.onEscapePressed: root.cancelRestartShell()
 
-      MouseArea {
-        anchors.fill: parent
-        onClicked: root.cancelRestartShell()
-      }
+      open: root.restartConfirmOpen
+      title: "Restart the shell?"
+      message: "The shell (and this panel) will restart so every plugin reloads from source. This fixes plugins that still run stale compiled QML. Unsaved panel state will be lost."
+      confirmText: "Restart"
+      confirmBordered: true
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
 
-      Rectangle {
-        id: restartConfirmCard
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Style.space(32), Style.space(360))
-        height: restartConfirmColumn.implicitHeight + Style.space(36)
-        color: root.panelBackground
-        radius: Style.cornerRadius
-        border.color: Style.selectedStateColor(root.contentForeground, Color.accent)
-        border.width: 1
-
-        ColumnLayout {
-          id: restartConfirmColumn
-          anchors.fill: parent
-          anchors.margins: Style.space(18)
-          spacing: Style.space(12)
-
-          Text {
-            text: "Restart the shell?"
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.title
-            font.bold: true
-            Layout.fillWidth: true
-          }
-
-          Text {
-            text: "The shell (and this panel) will restart so every plugin reloads from source. This fixes plugins that still run stale compiled QML. Unsaved panel state will be lost."
-            color: Qt.darker(root.contentForeground, 1.6)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.bodySmall
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-              text: "Cancel"
-              foreground: root.contentForeground
-              accent: Color.accent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.cancelRestartShell()
-            }
-
-            Button {
-              text: "Restart"
-              bordered: true
-              foreground: root.contentForeground
-              accent: Color.accent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.confirmRestartShell()
-            }
-          }
-        }
-      }
+      onCancelRequested: root.cancelRestartShell()
+      onConfirmRequested: root.confirmRestartShell()
     }
 
-    Rectangle {
-      id: installDialog
-      visible: root.installDialogOpen
+    Dialogs.Install {
       anchors.fill: parent
       z: 10000
-      color: Util.alpha(root.panelBackground, 0.7)
-      focus: true
-      Keys.priority: Keys.BeforeItem
-      Keys.onEscapePressed: {
-        if (!root.installRunning) root.installDialogOpen = false
-      }
 
-      MouseArea {
-        anchors.fill: parent
-        onClicked: {
-          if (!root.installRunning) root.installDialogOpen = false
-        }
-      }
+      open: root.installDialogOpen
+      running: root.installRunning
+      failed: root.installFailed
+      result: root.installResult
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
 
-      Rectangle {
-        id: installCard
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Style.space(32), Style.space(360))
-        height: installColumn.implicitHeight + Style.space(36)
-        color: root.panelBackground
-        radius: Style.cornerRadius
-        border.color: Style.selectedStateColor(root.contentForeground, Color.accent)
-        border.width: 1
-
-        ColumnLayout {
-          id: installColumn
-          anchors.fill: parent
-          anchors.margins: Style.space(18)
-          spacing: Style.space(12)
-
-          Text {
-            text: "Install a plugin from a git repo"
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.title
-            font.bold: true
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          Text {
-            text: "Plugins run as arbitrary, unsandboxed code inside your omarchy-shell process. Only add repos you trust — review the code before you enable the plugin."
-            color: Qt.darker(root.contentForeground, 1.6)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.bodySmall
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          TextField {
-            id: installUrlField
-            placeholderText: "https://github.com/acme/omarchy-weather.git"
-            foreground: root.contentForeground
-            accent: Color.accent
-            font.family: root.contentFontFamily
-            Layout.fillWidth: true
-            onAccepted: {
-              if (installUrlField.text.trim() !== "" && !root.installRunning)
-                root.requestInstall()
-            }
-          }
-
-          Text {
-            visible: root.installResult !== ""
-            text: root.installResult
-            textFormat: Text.PlainText
-            color: root.installRunning ? root.contentForeground
-              : (root.installFailed ? Color.urgent
-                : Style.selectedStateColor(root.contentForeground, Color.accent))
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.caption
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-              text: root.installResult !== "" ? "Close" : "Cancel"
-              enabled: !root.installRunning
-              foreground: root.contentForeground
-              accent: Color.accent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.installDialogOpen = false
-            }
-
-            Button {
-              text: root.installRunning ? "Installing…" : "Install"
-              enabled: !root.installRunning
-              foreground: root.contentForeground
-              accent: Color.accent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.requestInstall()
-            }
-          }
-        }
-      }
+      onCloseRequested: root.installDialogOpen = false
+      onInstallRequested: function(rawUrl) { root.requestInstall(rawUrl) }
     }
 
-    // Confirmation before installing: ask whether to enable the freshly
-    // installed plugin. Shown above the install dialog so the entered URL
-    // stays visible while deciding.
-    Rectangle {
-      id: installConfirmDialog
-      visible: root.installConfirmOpen
+    Dialogs.Confirm {
       anchors.fill: parent
       z: 11000
-      color: Util.alpha(root.panelBackground, 0.7)
-      focus: true
-      Keys.priority: Keys.BeforeItem
-      Keys.onEscapePressed: root.cancelInstallConfirm()
 
-      MouseArea {
-        anchors.fill: parent
-        onClicked: root.cancelInstallConfirm()
-      }
+      open: root.installConfirmOpen
+      title: "Install plugin?"
+      message: "\"" + root.installPendingUrl + "\" will be added via `omarchy plugin add` but will remain DISABLED until you enable it manually. Review the code after install, then enable from the plugin list."
+      confirmText: "Install"
+      maximumWidth: Style.space(380)
+      titleWrapMode: Text.WordWrap
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
 
-      Rectangle {
-        id: installConfirmCard
-        anchors.centerIn: parent
-        width: Math.min(parent.width - Style.space(32), Style.space(380))
-        height: installConfirmColumn.implicitHeight + Style.space(36)
-        color: root.panelBackground
-        radius: Style.cornerRadius
-        border.color: Style.selectedStateColor(root.contentForeground, Color.accent)
-        border.width: 1
-
-        ColumnLayout {
-          id: installConfirmColumn
-          anchors.fill: parent
-          anchors.margins: Style.space(18)
-          spacing: Style.space(12)
-
-          Text {
-            text: "Install plugin?"
-            color: root.contentForeground
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.title
-            font.bold: true
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          Text {
-            text: "\"" + root.installPendingUrl + "\" will be added via `omarchy plugin add` but will remain DISABLED until you enable it manually. Review the code after install, then enable from the plugin list."
-            textFormat: Text.PlainText
-            color: Qt.darker(root.contentForeground, 1.6)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.bodySmall
-            Layout.fillWidth: true
-            wrapMode: Text.WordWrap
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-
-            Item { Layout.fillWidth: true }
-
-            Button {
-              text: "Cancel"
-              foreground: root.contentForeground
-              accent: Color.accent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.cancelInstallConfirm()
-            }
-
-            Button {
-              text: "Install"
-              foreground: root.contentForeground
-              accent: Color.accent
-              fontFamily: root.contentFontFamily
-              fontSize: Style.font.bodySmall
-              horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
-              onClicked: root.installPlugin()
-            }
-          }
-        }
-      }
+      onCancelRequested: root.cancelInstallConfirm()
+      onConfirmRequested: root.installPlugin()
     }
   }
 }
