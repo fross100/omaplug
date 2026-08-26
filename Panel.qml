@@ -1847,17 +1847,6 @@ Panel {
                   spacing: Style.space(8)
 
                   Label {
-                    visible: root.kindDisplay(modelData.kinds) !== ""
-                    text: root.kindDisplay(modelData.kinds)
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                    elide: Label.ElideRight
-                    Layout.minimumWidth: 0
-                  }
-
-                  Label {
                     id: pluginNameLabel
                     text: modelData.name
                     textFormat: Text.PlainText
@@ -1966,13 +1955,25 @@ Panel {
                       cursorShape: pluginRowDelegate.mAuthorUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
                     }
 
-                    MouseArea {
-                      anchors.fill: parent
-                      enabled: pluginRowDelegate.mAuthorUrl !== ""
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: Qt.openUrlExternally(pluginRowDelegate.mAuthorUrl)
-                    }
-                  }
+                     MouseArea {
+                       anchors.fill: parent
+                       enabled: pluginRowDelegate.mAuthorUrl !== ""
+                       cursorShape: Qt.PointingHandCursor
+                       onClicked: Qt.openUrlExternally(pluginRowDelegate.mAuthorUrl)
+                     }
+                   }
+
+                   Label {
+                     visible: root.kindDisplay(modelData.kinds) !== ""
+                     text: root.kindDisplay(modelData.kinds)
+                     textFormat: Text.PlainText
+                     color: Qt.darker(root.contentForeground, 2.0)
+                     font.family: root.contentFontFamily
+                     font.pixelSize: Style.font.caption
+                     elide: Label.ElideRight
+                     Layout.minimumWidth: 0
+                     Layout.alignment: Qt.AlignRight
+                   }
 
                   Text {
                     visible: modelData.kinds !== ""
