@@ -185,6 +185,24 @@ Panel {
     return kinds.indexOf(root.filterKind) !== -1
   }
 
+  // Friendly, comma-joined labels for a plugin's kinds (e.g. "bar-widget"
+  // -> "Bar Widget"), falling back to the raw value when unknown.
+  function kindDisplay(kindsStr) {
+    if (!kindsStr) return ""
+    var parts = String(kindsStr).split(",")
+    var out = []
+    for (var i = 0; i < parts.length; i++) {
+      var k = parts[i].trim()
+      if (k === "") continue
+      var lbl = k
+      for (var j = 0; j < root.knownKinds.length; j++) {
+        if (root.knownKinds[j].value === k) { lbl = root.knownKinds[j].label; break }
+      }
+      out.push(lbl)
+    }
+    return out.join(", ")
+  }
+
   // Update checking state, keyed by the plugin folder name (sourceKey).
   property var updateStates: ({})
   property bool checkingUpdates: false
@@ -1838,7 +1856,8 @@ Panel {
                     font.bold: true
                     // Take the row's slack and elide; minimumWidth 0 lets the
                     // layout squeeze this instead of pushing the action column
-                    // out when the name is very long (issue #4).
+                    // out when the name is very long (issue #4). The badge,
+                    // version, and type hug the right side of the name row.
                     Layout.fillWidth: true
                     Layout.minimumWidth: 0
                     elide: Label.ElideRight
@@ -1891,6 +1910,17 @@ Panel {
                     color: Qt.darker(root.contentForeground, 2.0)
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.caption
+                  }
+
+                  Label {
+                    visible: root.kindDisplay(modelData.kinds) !== ""
+                    text: root.kindDisplay(modelData.kinds)
+                    textFormat: Text.PlainText
+                    color: Qt.darker(root.contentForeground, 2.0)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                    elide: Label.ElideRight
+                    Layout.minimumWidth: 0
                   }
                 }
 
