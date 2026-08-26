@@ -43,8 +43,8 @@ Omaplug is listed on the marketplace: [omarchyplugins.com/plugin.html?id=omaplug
 ## What it can do
 
 - **🔌 Enable / disable** — every discovered plugin (Omarchy's own and third-party) gets a simple toggle. Flipping it goes through the same registry the `omarchy plugin enable/disable` command uses, so what you see here is always what's really running.
-- **🔄 Check for updates** — scans every git-managed plugin, peeks at its remote, and tells you per plugin if it's *Up to date*, an *Update is available*, or something went *wrong* — streamed live as it checks.
-- **⬆️ Update (or update everything)** — apply one update, or blast through every plugin with a pending update in a single click.
+- **🔄 Check for updates** — scans every installed third-party plugin and distinguishes clean updates from local plugins, symlinked development plugins, local changes, and genuine fetch errors.
+- **⬆️ Update (or update everything)** — apply one update, or finish every proven-safe pending update from a single click, even while Omarchy reloads changed plugins.
 - **➕ Install** — paste a git repo URL and add a plugin in one step. It'll warn you first that plugins run as unsandboxed code, because honesty is the default here.
 - **🗑️ Remove** — third-party plugins only. Trash one, or enter Select mode to check several and remove them all at once (with a confirmation, no accidents).
 - **🔗 Source link** — every git-managed plugin gets a `SOURCE` button that jumps straight to its repo page.
