@@ -31,6 +31,7 @@ Panel {
   // ------------------------------------------------------------------ plugins
 
   property var pluginRows: []
+  property var rememberedBarStates: ({})
 
   // The shell injects the PluginRegistry into the bar's `shell` (the built-in
   // Bar.qml exposes no `pluginRegistry` property itself), so resolve it there
@@ -190,6 +191,24 @@ Panel {
   property bool updatingAll: false
   property string updateSummary: ""
   property string updatingId: ""
+  // Detached update-runner plumbing (from PR #1): the helper survives the
+  // plugin reload that a successful update triggers, and the newly loaded
+  // panel reconnects to the same job via this runtime status file.
+  property string updateHelperPath: ""
+  property string updateRunnerPath: ""
+  readonly property string updateStateRoot: {
+    var runtime = Quickshell.env("XDG_RUNTIME_DIR")
+    return runtime && runtime !== ""
+      ? runtime + "/omaplug"
+      : Quickshell.env("HOME") + "/.cache/omaplug"
+  }
+  readonly property string updateStatusPath: root.updateStateRoot + "/update.status"
+  readonly property int completedUpdateJobMaxAgeSeconds: 300
+  property bool updateDetachedRunning: false
+  property bool updateAwaitingStart: false
+  property string updateExpectedJobId: ""
+  property string updateProbePid: ""
+  property int updateDeadProbeCount: 0
   // Full-page "check for updates" view (replaces the header inline progress).
   property bool updatesPageOpen: false
   // Streaming parse state for per-plugin progress.
@@ -322,9 +341,12 @@ Panel {
           && (typeof node.slotSize === "number" || typeof node.labelVisible === "boolean")) {
         return node.text
       }
-      var data = node.data
-      if (data) {
-        for (var j = 0; j < data.length; j++) stack.push(data[j])
+      // QObject::data is not bindable; reading it while iconFor() participates
+      // in a Text binding makes Qt warn on every refresh. Bar buttons are
+      // visual items, so the bindable visual-child tree is the right scope.
+      var children = node.children
+      if (children) {
+        for (var j = 0; j < children.length; j++) stack.push(children[j])
       }
     }
     return ""
@@ -399,6 +421,8 @@ Panel {
     if (st === "CHECK") return "Checking…"
     if (st === "CURRENT") return "Up to date"
     if (st === "UPDATE") return "Update available"
+    if (st === "LOCAL_CHANGES") return "Local changes"
+    if (st === "LOCAL") return "Local plugin"
     if (st === "ERROR") return "Error"
     return st
   }
@@ -408,7 +432,12 @@ Panel {
     if (st === "UPDATE") return Style.selectedStateColor(root.contentForeground, Color.accent)
     if (st === "ERROR") return Color.urgent
     if (st === "CURRENT") return Qt.darker(root.contentForeground, 1.6)
+    if (st === "LOCAL_CHANGES" || st === "LOCAL") return Qt.darker(root.contentForeground, 1.5)
     return Qt.darker(root.contentForeground, 1.4)
+  }
+
+  function updateErrorSuffix(count) {
+    return count > 0 ? " (" + count + " error" + (count === 1 ? "" : "s") + ")" : ""
   }
 
   readonly property int pendingUpdateCount: {
@@ -422,7 +451,8 @@ Panel {
 
   readonly property int enabledPluginCount: {
     var n = 0
-    for (var i = 0; i < root.pluginRows.length; i++) if (root.pluginRows[i].enabled) n++
+    for (var i = 0; i < root.pluginRows.length; i++)
+      if (root.pluginEnabled(root.pluginRows[i].id)) n++
     n
   }
 
@@ -591,30 +621,39 @@ Panel {
   function checkUpdates() {
     var reg = root.registry
     var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
-    console.log("pluginsDir=", dir)
-    if (!dir || root.checkingUpdates || root.updatingId !== "") return
+    if (!dir || root.updateHelperPath === "" || root.checkingUpdates || root.updateDetachedRunning) return
     root.checkingUpdates = true
     root.updateSummary = ""
+    root.updateStates = ({})
     root.updateCheckLineBuf = ""
     root.updateCheckProcessed = 0
     root.checkWatchdog.restart()
-    var script = ""
-      + "dirs=\"$0\"\n"
-      + "{ for d in \"$dirs\"/*/; do\n"
-      + "  [ -d \"$d/.git\" ] || continue\n"
-      + "  id=$(basename \"$d\")\n"
-      + "  echo \"CHECK|$id\"\n"
-      + "  if ! timeout 15 git -C \"$d\" fetch --quiet origin HEAD 2>/dev/null; then\n"
-      + "    echo \"ERROR|$id\"; continue\n"
-      + "  fi\n"
-      + "  if [ \"$(git -C \"$d\" rev-parse HEAD)\" = \"$(git -C \"$d\" rev-parse FETCH_HEAD)\" ]; then\n"
-      + "    echo \"CURRENT|$id\"\n"
-      + "  else\n"
-      + "    echo \"UPDATE|$id\"\n"
-      + "  fi\n"
-      + "done; } | { head -c 65536; cat >/dev/null; }"
-    updateCheckProcess.command = ["bash", "-c", script, dir]
+    updateCheckProcess.command = [root.updateHelperPath, dir]
     updateCheckProcess.running = true
+  }
+
+  // Per-line parser for plugin-state.sh output: tab-separated
+  // "<state>\t<folderKey>[<\torigin-url>]" records. States beyond CHECK are
+  // final; a non-empty origin-url also feeds pluginRepos so row links work.
+  function applyUpdateCheckLine(line) {
+    var cleanLine = String(line || "").trim()
+    if (cleanLine === "") return
+    var parts = cleanLine.split("\t")
+    if (parts.length < 2) return
+    var state = parts[0]
+    var key = parts[1]
+    if (["CHECK", "CURRENT", "UPDATE", "LOCAL_CHANGES", "LOCAL", "ERROR"].indexOf(state) < 0 || key === "") return
+    var st = {}
+    for (var k in root.updateStates) st[k] = root.updateStates[k]
+    st[key] = state
+    root.updateStates = st
+
+    if (parts.length > 2 && parts[2] !== "") {
+      var repos = {}
+      for (var r in root.pluginRepos) repos[r] = root.pluginRepos[r]
+      repos[key] = parts[2]
+      root.pluginRepos = repos
+    }
   }
 
   // Incremental per-line parse of the streaming check output. The collector's
@@ -632,87 +671,201 @@ Panel {
     var ready = root.updateCheckLineBuf.substring(0, idx + 1)
     root.updateCheckLineBuf = root.updateCheckLineBuf.substring(idx + 1)
     var lines = ready.split("\n")
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim()
-      if (line === "") continue
-      var parts = line.split("|")
-      if (parts.length < 2) continue
-      var st = {}
-      for (var k in root.updateStates) st[k] = root.updateStates[k]
-      st[parts[1]] = parts[0]
-      root.updateStates = st
-    }
+    for (var i = 0; i < lines.length; i++) root.applyUpdateCheckLine(lines[i])
   }
 
   // Finalize after the stream ends: flush any unterminated tail, then compute
   // the summary from the collected per-plugin states.
-  function finishUpdateCheck() {
+  function finishUpdateCheck(exitCode) {
     if (root.updateCheckLineBuf !== "") {
       var tail = root.updateCheckLineBuf.trim()
       root.updateCheckLineBuf = ""
-      if (tail !== "") root.applyUpdateCheckData(tail + "\n")
+      if (tail !== "") root.applyUpdateCheckLine(tail)
     }
     root.checkWatchdog.stop()
     root.checkingUpdates = false
+    var states = {}
+    for (var oldKey in root.updateStates) states[oldKey] = root.updateStates[oldKey]
+    for (var i = 0; i < root.updateCheckRows.length; i++) {
+      var sourceKey = root.updateCheckRows[i].sourceKey
+      if (!states[sourceKey] || states[sourceKey] === "CHECK") states[sourceKey] = "ERROR"
+    }
+    root.updateStates = states
     var updates = 0
     var errors = 0
     for (var key in root.updateStates) {
       if (root.updateStates[key] === "UPDATE") updates++
       else if (root.updateStates[key] === "ERROR") errors++
     }
-    if (updates === 0 && errors === 0)
+    if (exitCode !== 0)
+      root.updateSummary = "Update check failed" + root.updateErrorSuffix(errors)
+    else if (updates === 0 && errors === 0)
       root.updateSummary = ""
     else if (updates === 0)
-      root.updateSummary = "All plugins up to date" + (errors ? " (" + errors + " error)" : "")
+      root.updateSummary = "No updates available" + root.updateErrorSuffix(errors)
     else
       root.updateSummary = updates + " update" + (updates > 1 ? "s" : "") + " available"
-        + (errors ? " (" + errors + " error)" : "")
+        + root.updateErrorSuffix(errors)
   }
 
-  function updatePlugin(id) {
-    if (root.updatingId !== "") return
-    root.updatingId = id
-    root.updateSummary = "Updating " + id + "…"
-    updateProcess.command = ["bash", "-c", "omarchy plugin update \"$0\" --yes 2>&1 | { head -c 8192; cat >/dev/null; }; exit ${PIPESTATUS[0]}", id]
-    updateProcess.running = true
+  function updatePlugin(sourceKey) {
+    root.startDetachedUpdates([sourceKey])
   }
 
   function updateAll() {
-    if (root.updatingId !== "" || root.checkingUpdates || root.updatingAll) return
-    var pending = 0
-    for (var key in root.updateStates) {
-      if (root.updateStates[key] === "UPDATE") pending++
+    if (root.checkingUpdates || root.updateDetachedRunning) return
+    var ids = []
+    for (var i = 0; i < root.updateCheckRows.length; i++) {
+      var key = root.updateCheckRows[i].sourceKey
+      if (root.updateStates[key] === "UPDATE") ids.push(key)
     }
-    if (pending === 0) return
-    root.updatingAll = true
-    root.updateSummary = "Updating all " + pending + "…"
-    updateAllProcess.command = ["bash", "-c", "omarchy plugin update --yes 2>&1 | { head -c 8192; cat >/dev/null; }; exit ${PIPESTATUS[0]}"]
-    updateAllProcess.running = true
+    root.startDetachedUpdates(ids)
   }
 
-  function onUpdateAllFinished(exitCode) {
+  // Launch only the repositories proven updateable by the preceding check.
+  // The helper is detached because the first successful merge makes Omarchy
+  // unload this panel; progress lives at a stable runtime path so the newly
+  // loaded instance can reconnect to the same job.
+  function startDetachedUpdates(ids) {
+    if (!ids || ids.length === 0 || root.checkingUpdates || root.updateDetachedRunning) return
+    if (root.updateRunnerPath === "" || root.updateStatusPath === "") {
+      root.updateSummary = "Update helper not found"
+      return
+    }
+
+    root.updateDetachedRunning = true
+    root.updateAwaitingStart = true
+    root.updateExpectedJobId = Date.now().toString(36) + "-" + Math.floor(Math.random() * 0x1000000).toString(36)
+    root.updateProbePid = ""
+    root.updateDeadProbeCount = 0
+    root.updatingAll = ids.length > 1
+    root.updatingId = ids.length === 1 ? ids[0] : ""
+    root.updateSummary = ids.length === 1
+      ? "Updating " + ids[0] + "…"
+      : "Updating 0 of " + ids.length + "…"
+
+    var launch = [root.updateRunnerPath, root.updateStatusPath, root.updateExpectedJobId]
+    for (var i = 0; i < ids.length; i++) launch.push(ids[i])
+    try {
+      Quickshell.execDetached(launch)
+    } catch (e) {
+      root.markUpdateInterrupted("Update could not start")
+      return
+    }
+    updateStartTimer.restart()
+    updateStatusPoll.restart()
+  }
+
+  function applyUpdateJobStatus() {
+    var text = ""
+    try { text = updateStatusFile.text() } catch (e) { return }
+    if (String(text || "").trim() === "") return
+
+    var lines = String(text).split("\n")
+    var jobId = ""
+    var pid = ""
+    var total = 0
+    var current = ""
+    var completed = 0
+    var failures = 0
+    var finished = 0
+    var done = false
+    var outcomes = {}
+
+    for (var i = 0; i < lines.length; i++) {
+      var parts = lines[i].split("\t")
+      var event = parts[0]
+      if (event === "job") jobId = parts[1] || ""
+      else if (event === "pid") pid = parts[1] || ""
+      else if (event === "total") total = parseInt(parts[1] || "0")
+      else if (event === "start") current = parts[1] || ""
+      else if (event === "ok") {
+        outcomes[parts[1]] = "CURRENT"
+        completed++
+        if (current === parts[1]) current = ""
+      } else if (event === "failed") {
+        outcomes[parts[1]] = "ERROR"
+        completed++
+        failures++
+        if (current === parts[1]) current = ""
+      } else if (event === "finished") {
+        finished = parseInt(parts[1] || "0")
+      } else if (event === "done") {
+        done = true
+        completed = parseInt(parts[1] || String(completed)) + parseInt(parts[2] || String(failures))
+        failures = parseInt(parts[2] || String(failures))
+      }
+    }
+
+    // A previous completed job may still be present while the newly detached
+    // helper starts. Ignore it until this panel sees its own job id. A panel
+    // recreated by Omarchy's hot reload has no expectation and adopts the
+    // current job from disk instead.
+    var expectingJob = root.updateExpectedJobId !== ""
+    if (jobId === "" || (expectingJob && jobId !== root.updateExpectedJobId)) return
+    if (!expectingJob && done && finished > 0
+        && Date.now() / 1000 - finished > root.completedUpdateJobMaxAgeSeconds) return
+    root.updateExpectedJobId = jobId
+    root.updateAwaitingStart = false
+    updateStartTimer.stop()
+    if (pid !== root.updateProbePid) {
+      root.updateProbePid = pid
+      root.updateDeadProbeCount = 0
+    }
+
+    var states = {}
+    for (var key in root.updateStates) states[key] = root.updateStates[key]
+    for (var outcome in outcomes) states[outcome] = outcomes[outcome]
+    root.updateStates = states
+    root.updatingAll = total > 1
+    root.updatingId = current
+
+    if (done) {
+      root.updateDetachedRunning = false
+      root.updateAwaitingStart = false
+      root.updatingAll = false
+      root.updatingId = ""
+      root.updateProbePid = ""
+      root.updateDeadProbeCount = 0
+      updateStartTimer.stop()
+      updateStatusPoll.stop()
+      var successes = Math.max(0, completed - failures)
+      if (failures === 0)
+        root.updateSummary = successes === 1 ? "1 plugin updated" : successes + " plugins updated"
+      else
+        root.updateSummary = successes + " updated, " + failures + " failed"
+      root.refreshPlugins()
+      return
+    }
+
+    root.updateDetachedRunning = true
+    root.updateSummary = total > 1
+      ? "Updating " + completed + " of " + total + (current ? ": " + current : "") + "…"
+      : (current ? "Updating " + current + "…" : "Preparing update…")
+    updateStatusPoll.restart()
+  }
+
+  function recoverExistingUpdateOrFailStart() {
+    if (!root.updateAwaitingStart) return
+    root.updateAwaitingStart = false
+    root.updateExpectedJobId = ""
+    root.updateDetachedRunning = false
+    root.applyUpdateJobStatus()
+    if (!root.updateDetachedRunning)
+      root.markUpdateInterrupted("Update could not start. Another update may already be running.")
+  }
+
+  function markUpdateInterrupted(message) {
+    root.updateDetachedRunning = false
+    root.updateAwaitingStart = false
     root.updatingAll = false
-    if (exitCode === 0)
-      root.updateSummary = "All updates applied"
-    else {
-      var err = String(updateStdout.text || "").trim()
-      root.updateSummary = "Bulk update failed" + (err ? ": " + err : "")
-    }
-    root.refreshPlugins()
-    Qt.callLater(function() { root.checkUpdates() })
-  }
-
-  function onUpdateFinished(exitCode) {
-    var id = root.updatingId
     root.updatingId = ""
-    if (exitCode === 0)
-      root.updateSummary = "Updated " + id
-    else {
-      var err = String(updateStdout.text || "").trim()
-      root.updateSummary = "Update of " + id + " failed" + (err ? ": " + err : "")
-    }
-    root.refreshPlugins()
-    Qt.callLater(function() { root.checkUpdates() })
+    root.updateExpectedJobId = ""
+    root.updateProbePid = ""
+    root.updateDeadProbeCount = 0
+    updateStartTimer.stop()
+    updateStatusPoll.stop()
+    root.updateSummary = message || "Update interrupted. Check again."
   }
 
   // Fetches the public marketplace catalog (capped at 2 MB like every other
@@ -796,7 +949,8 @@ Panel {
 
   property Process updateCheckProcess: Process {
     onExited: function(exitCode) {
-      root.finishUpdateCheck()
+      console.log("updateCheckProcess onExited exitCode=", exitCode)
+      root.finishUpdateCheck(exitCode)
     }
     stdout: StdioCollector {
       id: updateCheckStdout
@@ -805,17 +959,55 @@ Panel {
     }
   }
 
-  property Process updateProcess: Process {
+  // Liveness probe for the detached update runner: kill -0 the recorded pid;
+  // two consecutive failures mean the helper died without a done marker.
+  property Process updateProbeProcess: Process {
     onExited: function(exitCode) {
-      root.onUpdateFinished(exitCode)
+      if (!root.updateDetachedRunning || root.updateAwaitingStart) return
+      if (exitCode === 0) {
+        root.updateDeadProbeCount = 0
+        return
+      }
+      root.updateDeadProbeCount++
+      updateStatusFile.reload()
+      if (root.updateDeadProbeCount >= 2)
+        root.markUpdateInterrupted()
     }
-    stdout: StdioCollector { id: updateStdout; waitForEnd: true }
   }
 
-  property Process updateAllProcess: Process {
-    onExited: function(exitCode) {
-      console.log("updateAllProcess onExited exitCode=", exitCode)
-      root.onUpdateAllFinished(exitCode)
+  FileView {
+    id: updateStatusFile
+    path: root.updateStatusPath
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.applyUpdateJobStatus()
+    onFileChanged: updateStatusFile.reload()
+  }
+
+  Timer {
+    id: updateStartTimer
+    interval: 3000
+    repeat: false
+    onTriggered: root.recoverExistingUpdateOrFailStart()
+  }
+
+  Timer {
+    id: updateStatusPoll
+    interval: 500
+    repeat: true
+    running: root.updateDetachedRunning
+    onTriggered: updateStatusFile.reload()
+  }
+
+  Timer {
+    interval: 2000
+    repeat: true
+    running: root.updateDetachedRunning && !root.updateAwaitingStart
+    onTriggered: {
+      if (!updateProbeProcess.running && /^[0-9]+$/.test(root.updateProbePid)) {
+        updateProbeProcess.command = ["bash", "-c", 'kill -0 "$0" 2>/dev/null', root.updateProbePid]
+        updateProbeProcess.running = true
+      }
     }
   }
 
@@ -1098,14 +1290,17 @@ Panel {
       var m = reg.installedPlugins[id]
       if (!m || typeof m !== "object") continue
       var sourceDir = String(m.__sourceDir || "")
+      var kinds = Array.isArray(m.kinds) ? m.kinds : []
+      var isBarOption = kinds.indexOf("bar") !== -1
+      var isBarWidget = kinds.indexOf("bar-widget") !== -1
       rows.push({
         id: id,
         name: m.name || id,
         version: m.version || "unknown",
         author: m.author || "",
         description: m.description || "",
-        kinds: (m.kinds || []).join(", "),
-        enabled: reg.isEnabled(id) === true,
+        kinds: kinds.join(", "),
+        canDisable: !isBarOption,
         firstParty: m.__isFirstParty === true,
         sourceDir: sourceDir,
         sourceKey: sourceDir.replace(/\/+$/, "").split("/").pop() || "",
@@ -1122,10 +1317,78 @@ Panel {
     root.scanPluginRepos()
   }
 
+  function barStateFor(id) {
+    var reg = root.registry
+    var config = reg && typeof reg.shellConfigProvider === "function"
+      ? reg.shellConfigProvider()
+      : null
+    var layout = config && config.bar ? config.bar.layout : null
+    if (!layout) return null
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var entries = layout[sections[s]]
+      if (!Array.isArray(entries)) continue
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i]
+        var entryId = reg && typeof reg.barEntryId === "function"
+          ? reg.barEntryId(entry)
+          : (entry && typeof entry === "object" ? entry.id : entry)
+        if (String(entryId || "") === String(id))
+          return {
+            section: sections[s],
+            index: i,
+            entry: entry && typeof entry === "object"
+              ? JSON.parse(JSON.stringify(entry))
+              : { id: String(entryId) }
+          }
+      }
+    }
+    return null
+  }
+
+  function rememberBarState(id, state) {
+    var next = {}
+    for (var key in root.rememberedBarStates)
+      next[key] = root.rememberedBarStates[key]
+    if (state) next[String(id)] = state
+    else delete next[String(id)]
+    root.rememberedBarStates = next
+  }
+
+  function restoreBarSettings(id, state) {
+    var reg = root.registry
+    var entry = state ? state.entry : null
+    if (!entry || !reg || typeof reg.setBarWidget !== "function") return
+    var location = root.barStateFor(id)
+    if (!location) return
+    var selector = { section: location.section, index: location.index }
+    for (var key in entry) {
+      if (key === "id") continue
+      var error = reg.setBarWidget(id, key, entry[key], selector)
+      if (error) console.warn("Could not restore " + id + " setting " + key + ": " + error)
+    }
+  }
+
   function setPluginEnabled(id, value) {
     var reg = root.registry
     if (!reg || typeof reg.setEnabled !== "function") return
-    reg.setEnabled(id, value)
+    // Bar options cannot be disabled directly (they are bar placements);
+    // guard here so a stale UI can't fight the registry.
+    for (var i = 0; i < root.pluginRows.length; i++) {
+      var row = root.pluginRows[i]
+      if (row.id === id && value === false && row.canDisable === false) return
+    }
+    var remembered = value ? root.rememberedBarStates[String(id)] : null
+    var current = value ? null : root.barStateFor(id)
+    var changed = remembered
+      ? reg.setEnabled(id, true, remembered)
+      : reg.setEnabled(id, value)
+    if (!changed) return
+    if (!value && current) root.rememberBarState(id, current)
+    else if (value && remembered) {
+      root.restoreBarSettings(id, remembered)
+      root.rememberBarState(id, null)
+    }
   }
 
   function registryRevision() {
@@ -1133,18 +1396,36 @@ Panel {
     return reg ? reg.registryRevision : 0
   }
 
+  function pluginEnabled(id) {
+    root.registryRevision()
+    var reg = root.registry
+    var manifest = reg && reg.installedPlugins ? reg.installedPlugins[id] : null
+    if (!manifest) return false
+    var kinds = Array.isArray(manifest.kinds) ? manifest.kinds : []
+    // Built-in widgets remain loadable even while absent from the bar, so the
+    // user-facing toggle follows their actual placement instead of isEnabled().
+    return kinds.indexOf("bar-widget") !== -1 && typeof reg.inBar === "function"
+      ? reg.inBar(id) === true
+      : reg.isEnabled(id) === true
+  }
+
   Connections {
     target: root.registry
     function onRegistryRevisionChanged() {
       root.invalidateGlyphCache()
+    }
+    function onScanFinished() {
       root.refreshPlugins()
     }
   }
 
   Component.onCompleted: {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
+    root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
+    root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
     fetchMarketplace()
+    Qt.callLater(function() { updateStatusFile.reload() })
   }
 
   // ------------------------------------------------------------- open / close
@@ -1351,7 +1632,7 @@ Panel {
           Button {
             iconText: "\uf021"
             tooltipText: "Check updates"
-            enabled: !root.checkingUpdates && root.updatingId === "" && !root.updatingAll
+            enabled: !root.checkingUpdates && !root.updateDetachedRunning
             foreground: root.contentForeground
             accent: Color.accent
             fontFamily: root.contentFontFamily
@@ -1464,6 +1745,7 @@ Panel {
           delegate: Item {
             id: rowWrapper
             required property var modelData
+            required property int index
             width: pluginList.width
             height: pluginRowDelegate.height + Style.space(9)
 
@@ -1912,15 +2194,19 @@ Panel {
                   // Inline switch: solid accent track when ON so it reads the
                   // same as the accent-colored author / "View on marketplace"
                   // links (ToggleSwitch's fill is too faint at 0.18 alpha).
+                  // Gated like the PR's native toggle: bar options that are
+                  // active cannot be switched off directly.
                   Item {
                     id: toggle
-                    readonly property bool checked: modelData.enabled
+                    readonly property bool checked: root.pluginEnabled(rowWrapper.modelData.id)
+                    readonly property bool canToggle: rowWrapper.modelData.canDisable || !toggle.checked
                     readonly property int _h: Math.max(22, Math.round(Style.spacing.controlHeight * 0.55))
                     readonly property int _w: Math.round(_h * 1.9)
                     readonly property int _k: Math.max(6, Math.round(_h * 0.72))
                     readonly property int _inset: Math.max(1, Math.round((_h - _k) / 2))
                     implicitWidth: _w
                     implicitHeight: _h
+                    opacity: canToggle ? 1 : 0.4
                     Layout.alignment: Qt.AlignVCenter
 
                     Rectangle {
@@ -1946,8 +2232,11 @@ Panel {
 
                     MouseArea {
                       anchors.fill: parent
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: Qt.callLater(function() { root.setPluginEnabled(modelData.id, !modelData.enabled) })
+                      cursorShape: toggle.canToggle ? Qt.PointingHandCursor : Qt.ArrowCursor
+                      onClicked: {
+                        if (!toggle.canToggle) return
+                        Qt.callLater(function() { root.setPluginEnabled(rowWrapper.modelData.id, !toggle.checked) })
+                      }
                     }
                   }
 
@@ -2005,8 +2294,8 @@ Panel {
                   Button {
                     visible: modelData.updatable
                       && root.updateStates[modelData.sourceKey] === "UPDATE"
-                    text: root.updatingId === modelData.id ? "Updating…" : "Update"
-                    enabled: root.updatingId === "" && !root.updatingAll
+                    text: root.updatingId === modelData.sourceKey ? "Updating…" : "Update"
+                    enabled: !root.updateDetachedRunning
                     bordered: true
                     // Keep the idle border but drop it while hovered.
                     borderSpec: hot ? Border.none()
@@ -2018,7 +2307,7 @@ Panel {
                     horizontalPadding: Style.space(8)
                     verticalPadding: Style.space(3)
                     Layout.fillWidth: true
-                    onClicked: root.updatePlugin(modelData.id)
+                    onClicked: root.updatePlugin(modelData.sourceKey)
                   }
                 }
               }
@@ -2347,12 +2636,13 @@ Panel {
 
               Button {
                 readonly property string st: String(root.updateStates[modelData.sourceKey] || "")
-                visible: st === "CURRENT" || st === "UPDATE" || st === "ERROR"
-                // Icon + label: a "UPDATE" pill when a newer version is
+                visible: st === "CURRENT" || st === "UPDATE" || st === "LOCAL_CHANGES"
+                  || st === "LOCAL" || st === "ERROR"
+                // Icon + label: an "UPDATE" pill when a newer version is
                 // available (clickable to update), a plain check otherwise.
                 text: st === "UPDATE" ? "\uEAC2 UPDATE" : "\uF00C"
-                enabled: st === "UPDATE"
-                onClicked: root.updatePlugin(modelData.id)
+                enabled: st === "UPDATE" && !root.updateDetachedRunning
+                onClicked: root.updatePlugin(modelData.sourceKey)
                 bordered: true
                 // Keep the idle border but drop it on hover, matching the
                 // other action buttons.
@@ -2413,7 +2703,7 @@ Panel {
           Button {
             text: root.updatingAll ? "Updating all…" : "Update all"
             enabled: root.pendingUpdateCount > 0
-              && !root.checkingUpdates && root.updatingId === "" && !root.updatingAll
+              && !root.checkingUpdates && !root.updateDetachedRunning
             visible: root.pendingUpdateCount > 0
             foreground: root.contentForeground
             accent: Color.accent
@@ -2469,9 +2759,14 @@ Panel {
           implicitWidth: Style.space(180)
 
           property var plugin: root.rowMenuPlugin()
+          readonly property bool pluginIsEnabled: plugin ? root.pluginEnabled(plugin.id) : false
 
           Button {
-            text: rowMenuColumn.plugin && rowMenuColumn.plugin.enabled ? "Disable" : "Enable"
+            text: rowMenuColumn.pluginIsEnabled
+              ? (rowMenuColumn.plugin.canDisable ? "Disable" : "Active bar")
+              : "Enable"
+            enabled: rowMenuColumn.plugin
+              && (rowMenuColumn.plugin.canDisable || !rowMenuColumn.pluginIsEnabled)
             foreground: root.contentForeground
             accent: Color.accent
             fontFamily: root.contentFontFamily
@@ -2481,7 +2776,7 @@ Panel {
             Layout.fillWidth: true
             Layout.alignment: Qt.AlignLeft
             onClicked: {
-              root.setPluginEnabled(root.rowMenuId, !rowMenuColumn.plugin.enabled)
+              root.setPluginEnabled(root.rowMenuId, !rowMenuColumn.pluginIsEnabled)
               root.closeRowMenu()
             }
           }
