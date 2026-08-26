@@ -1836,9 +1836,11 @@ Panel {
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
-                    // Hugs its content so the badge sits right next to the
-                    // name; the hard cap only kicks in for extreme names.
-                    Layout.maximumWidth: pluginList.width * 0.55
+                    // Take the row's slack and elide; minimumWidth 0 lets the
+                    // layout squeeze this instead of pushing the action column
+                    // out when the name is very long (issue #4).
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 0
                     elide: Label.ElideRight
                   }
 
@@ -1899,6 +1901,7 @@ Panel {
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
                   Layout.fillWidth: true
+                  Layout.minimumWidth: 0
                   wrapMode: Label.Wrap
                   maximumLineCount: 2
                   elide: Label.ElideRight
@@ -1907,12 +1910,16 @@ Panel {
                 // Creator line under the description, linking to the
                 // repository owner's GitHub profile when derivable, with
                 // the plugin kind on the same line.
-                RowLayout {
-                  visible: modelData.author !== ""
-                  spacing: Style.space(6)
+                 RowLayout {
+                   visible: modelData.author !== ""
+                   spacing: Style.space(6)
+                   Layout.fillWidth: true
 
-                  Text {
-                    text: "by " + modelData.author + (pluginRowDelegate.mAuthorUrl !== "" ? " ↗" : "")
+                   Text {
+                     text: "by " + modelData.author + (pluginRowDelegate.mAuthorUrl !== "" ? " ↗" : "")
+                     Layout.fillWidth: true
+                     Layout.minimumWidth: 0
+                     elide: Text.ElideRight
                     textFormat: Text.PlainText
                     color: pluginRowDelegate.mAuthorUrl !== ""
                       ? Color.accent
