@@ -185,6 +185,24 @@ Panel {
     return kinds.indexOf(root.filterKind) !== -1
   }
 
+  // Friendly, comma-joined labels for a plugin's kinds (e.g. "bar-widget"
+  // -> "Bar Widget"), falling back to the raw value when unknown.
+  function kindDisplay(kindsStr) {
+    if (!kindsStr) return ""
+    var parts = String(kindsStr).split(",")
+    var out = []
+    for (var i = 0; i < parts.length; i++) {
+      var k = parts[i].trim()
+      if (k === "") continue
+      var lbl = k
+      for (var j = 0; j < root.knownKinds.length; j++) {
+        if (root.knownKinds[j].value === k) { lbl = root.knownKinds[j].label; break }
+      }
+      out.push(lbl)
+    }
+    return out.join(", ").toUpperCase()
+  }
+
   // Update checking state, keyed by the plugin folder name (sourceKey).
   property var updateStates: ({})
   property bool checkingUpdates: false
@@ -1836,9 +1854,11 @@ Panel {
                     font.family: root.contentFontFamily
                     font.pixelSize: Style.font.body
                     font.bold: true
-                    // Hugs its content so the badge sits right next to the
-                    // name; the hard cap only kicks in for extreme names.
-                    Layout.maximumWidth: pluginList.width * 0.55
+                    // Size to the name's content so the badge/version hug the
+                    // name (right after it), not the far-right edge.
+                    // minimumWidth 0 lets it shrink + elide instead of pushing
+                    // the action column out when the name is very long (#4).
+                    Layout.minimumWidth: 0
                     elide: Label.ElideRight
                   }
 
@@ -1899,6 +1919,7 @@ Panel {
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
                   Layout.fillWidth: true
+                  Layout.minimumWidth: 0
                   wrapMode: Label.Wrap
                   maximumLineCount: 2
                   elide: Label.ElideRight
@@ -1907,12 +1928,15 @@ Panel {
                 // Creator line under the description, linking to the
                 // repository owner's GitHub profile when derivable, with
                 // the plugin kind on the same line.
-                RowLayout {
-                  visible: modelData.author !== ""
-                  spacing: Style.space(6)
+                 RowLayout {
+                   visible: modelData.author !== ""
+                   spacing: Style.space(6)
+                   Layout.fillWidth: true
 
-                  Text {
-                    text: "by " + modelData.author + (pluginRowDelegate.mAuthorUrl !== "" ? " ↗" : "")
+                    Text {
+                      text: "by " + modelData.author + (pluginRowDelegate.mAuthorUrl !== "" ? " ↗" : "")
+                      Layout.minimumWidth: 0
+                      elide: Text.ElideRight
                     textFormat: Text.PlainText
                     color: pluginRowDelegate.mAuthorUrl !== ""
                       ? Color.accent
@@ -1930,28 +1954,40 @@ Panel {
                       cursorShape: pluginRowDelegate.mAuthorUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
                     }
 
-                    MouseArea {
-                      anchors.fill: parent
-                      enabled: pluginRowDelegate.mAuthorUrl !== ""
-                      cursorShape: Qt.PointingHandCursor
-                      onClicked: Qt.openUrlExternally(pluginRowDelegate.mAuthorUrl)
-                    }
-                  }
+                     MouseArea {
+                       anchors.fill: parent
+                       enabled: pluginRowDelegate.mAuthorUrl !== ""
+                       cursorShape: Qt.PointingHandCursor
+                       onClicked: Qt.openUrlExternally(pluginRowDelegate.mAuthorUrl)
+                     }
+                   }
 
-                  Text {
-                    visible: modelData.kinds !== ""
-                    text: "· " + modelData.kinds
-                    textFormat: Text.PlainText
-                    color: Qt.darker(root.contentForeground, 2.0)
-                    font.family: root.contentFontFamily
-                    font.pixelSize: Style.font.caption
-                  }
+                   Text {
+                     visible: root.kindDisplay(modelData.kinds) !== ""
+                     text: "·"
+                     textFormat: Text.PlainText
+                     color: Qt.darker(root.contentForeground, 2.0)
+                     font.family: root.contentFontFamily
+                     font.pixelSize: Style.font.caption
+                   }
 
-                  Item {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                  }
-                }
+                   Label {
+                     visible: root.kindDisplay(modelData.kinds) !== ""
+                     text: root.kindDisplay(modelData.kinds)
+                     textFormat: Text.PlainText
+                     color: Qt.darker(root.contentForeground, 2.0)
+                     font.family: root.contentFontFamily
+                     font.pixelSize: Style.font.caption
+                     elide: Label.ElideRight
+                     Layout.minimumWidth: 0
+                     Layout.alignment: Qt.AlignRight
+                   }
+
+                   Item {
+                     Layout.fillWidth: true
+                     Layout.preferredHeight: 1
+                   }
+                 }
 
                 // Marketplace listing links on their own line under the
                 // description row, pipe-separated: the listing page, the
