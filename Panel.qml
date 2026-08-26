@@ -1782,103 +1782,28 @@ Panel {
     }
 
 
-    // ── Row context menu ─────────────────────────────────────────────────────
-    // Right-click on a plugin row on the main page opens a small menu with the
-    // same actions the row buttons offer: enable/disable, open the source repo
-    // (when known), and remove. Implemented as an overlay Rectangle (matching
-    // the other dialogs) instead of a QQC Popup.
-    Rectangle {
+    Plugin.ContextMenu {
       id: rowMenuOverlay
-      visible: root.rowMenuOpen
       anchors.fill: parent
       z: 12000
-      color: "transparent"
-      focus: true
-      Keys.priority: Keys.BeforeItem
-      Keys.onEscapePressed: root.closeRowMenu()
 
-      MouseArea {
-        anchors.fill: parent
-        onClicked: root.closeRowMenu()
+      open: root.rowMenuOpen
+      plugin: root.rowMenuPlugin()
+      pluginEnabled: rowMenuOverlay.plugin ? root.pluginEnabled(rowMenuOverlay.plugin.id) : false
+      repoKnown: rowMenuOverlay.plugin
+        && rowMenuOverlay.plugin.sourceKey !== ""
+        && root.pluginRepos[rowMenuOverlay.plugin.sourceKey] !== undefined
+      requestedPosition: root.rowMenuPos
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
+
+      onCloseRequested: root.closeRowMenu()
+      onEnabledChangeRequested: function(pluginId, enabled) {
+        root.setPluginEnabled(pluginId, enabled)
       }
-
-      Rectangle {
-        id: rowMenu
-        x: Math.min(root.rowMenuPos.x, parent.width - width - Style.space(4))
-        y: Math.min(root.rowMenuPos.y, parent.height - height - Style.space(4))
-        width: rowMenuColumn.implicitWidth + Style.space(8)
-        height: rowMenuColumn.implicitHeight + Style.space(8)
-        color: root.panelBackground
-        radius: Style.cornerRadius
-        border.color: Util.alpha(root.contentForeground, 0.2)
-        border.width: 1
-
-        ColumnLayout {
-          id: rowMenuColumn
-          anchors.fill: parent
-          anchors.margins: Style.space(4)
-          spacing: Style.space(2)
-          implicitWidth: Style.space(180)
-
-          property var plugin: root.rowMenuPlugin()
-          readonly property bool pluginIsEnabled: plugin ? root.pluginEnabled(plugin.id) : false
-
-          Button {
-            text: rowMenuColumn.pluginIsEnabled
-              ? (rowMenuColumn.plugin.canDisable ? "Disable" : "Active bar")
-              : "Enable"
-            enabled: rowMenuColumn.plugin
-              && (rowMenuColumn.plugin.canDisable || !rowMenuColumn.pluginIsEnabled)
-            foreground: root.contentForeground
-            accent: Color.accent
-            fontFamily: root.contentFontFamily
-            fontSize: Style.font.bodySmall
-            horizontalPadding: Style.space(8)
-            verticalPadding: Style.space(5)
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignLeft
-            onClicked: {
-              root.setPluginEnabled(root.rowMenuId, !rowMenuColumn.pluginIsEnabled)
-              root.closeRowMenu()
-            }
-          }
-
-          Button {
-            visible: rowMenuColumn.plugin && rowMenuColumn.plugin.sourceKey !== "" && root.pluginRepos[rowMenuColumn.plugin.sourceKey] !== undefined
-            text: "Source"
-            foreground: root.contentForeground
-            accent: Color.accent
-            fontFamily: root.contentFontFamily
-            fontSize: Style.font.bodySmall
-            horizontalPadding: Style.space(8)
-            verticalPadding: Style.space(5)
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignLeft
-            onClicked: {
-              root.openPluginRepo(rowMenuColumn.plugin.sourceKey)
-              root.closeRowMenu()
-            }
-          }
-
-          Button {
-            visible: rowMenuColumn.plugin && !rowMenuColumn.plugin.firstParty
-            text: "Remove"
-            foreground: Color.urgent
-            accent: Color.urgent
-            fontFamily: root.contentFontFamily
-            fontSize: Style.font.bodySmall
-            horizontalPadding: Style.space(8)
-            verticalPadding: Style.space(5)
-            Layout.fillWidth: true
-            Layout.alignment: Qt.AlignLeft
-            onClicked: {
-              var id = root.rowMenuId
-              root.closeRowMenu()
-              root.removePlugin(id)
-            }
-          }
-        }
-      }
+      onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
+      onRemovalRequested: function(pluginId) { root.removePlugin(pluginId) }
     }
 
     // Confirmation before any plugin removal. Shows what is about to be deleted
