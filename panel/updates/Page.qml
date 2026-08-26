@@ -176,10 +176,15 @@ Rectangle {
                   Layout.preferredWidth: Style.space(28)
                   Layout.preferredHeight: Layout.preferredWidth
                   radius: 6
+                  clip: true
                   color: Presentation.iconColor(updateRow.modelData.name)
 
                   Text {
                     anchors.centerIn: parent
+                    width: parent.width - 4
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
                     text: page.iconFor(updateRow.modelData.id) || updateRow.modelData.name.trim().charAt(0).toUpperCase()
                     textFormat: Text.PlainText
                     color: "white"
@@ -330,9 +335,13 @@ Rectangle {
             spacing: Style.space(8)
 
             Label {
-              text: page.pendingCount > 0
-                ? page.pendingCount + " update" + (page.pendingCount > 1 ? "s" : "") + " available"
-                : (page.checking ? "Checking…" : "No updates available")
+              text: page.checking
+                ? (page.pendingCount > 0
+                    ? "Checking… " + page.pendingCount + " update" + (page.pendingCount > 1 ? "s" : "") + " found"
+                    : "Checking…")
+                : (page.pendingCount > 0
+                    ? page.pendingCount + " update" + (page.pendingCount > 1 ? "s" : "") + " available"
+                    : "No updates available")
               color: Qt.darker(page.foreground, 1.5)
               font.family: page.fontFamily
               font.pixelSize: Style.font.bodySmall
@@ -354,7 +363,7 @@ Rectangle {
             Button {
               text: page.updatingAll ? "Updating all…" : "Update all"
               enabled: page.pendingCount > 0 && !page.checking && !page.updateRunning
-              visible: page.pendingCount > 0
+              visible: page.pendingCount > 0 && !page.checking
               foreground: page.foreground
               accent: Color.accent
               fontFamily: page.fontFamily

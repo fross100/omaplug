@@ -83,10 +83,15 @@ Item {
         Layout.preferredWidth: Style.space(28)
         Layout.preferredHeight: Layout.preferredWidth
         radius: 6
+        clip: true
         color: Presentation.iconColor(pluginRow.modelData.name)
 
         Text {
           anchors.centerIn: parent
+          width: parent.width - 4
+          horizontalAlignment: Text.AlignHCenter
+          elide: Text.ElideRight
+          maximumLineCount: 1
           text: pluginRow.icon || pluginRow.modelData.name.trim().charAt(0).toUpperCase()
           textFormat: Text.PlainText
           color: "white"
