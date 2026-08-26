@@ -1933,11 +1933,10 @@ Panel {
                    spacing: Style.space(6)
                    Layout.fillWidth: true
 
-                   Text {
-                     text: "by " + modelData.author + (pluginRowDelegate.mAuthorUrl !== "" ? " ↗" : "")
-                     Layout.fillWidth: true
-                     Layout.minimumWidth: 0
-                     elide: Text.ElideRight
+                    Text {
+                      text: "by " + modelData.author + (pluginRowDelegate.mAuthorUrl !== "" ? " ↗" : "")
+                      Layout.minimumWidth: 0
+                      elide: Text.ElideRight
                     textFormat: Text.PlainText
                     color: pluginRowDelegate.mAuthorUrl !== ""
                       ? Color.accent
