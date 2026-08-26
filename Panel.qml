@@ -1962,6 +1962,15 @@ Panel {
                      }
                    }
 
+                   Text {
+                     visible: root.kindDisplay(modelData.kinds) !== ""
+                     text: "·"
+                     textFormat: Text.PlainText
+                     color: Qt.darker(root.contentForeground, 2.0)
+                     font.family: root.contentFontFamily
+                     font.pixelSize: Style.font.caption
+                   }
+
                    Label {
                      visible: root.kindDisplay(modelData.kinds) !== ""
                      text: root.kindDisplay(modelData.kinds)
