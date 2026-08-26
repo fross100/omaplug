@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omaplug",
   "name": "Plugin Manager",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "author": "Fross",
   "license": "MIT",
   "description": "Manage installed Omarchy plugins: enable/disable, update, install from git, and remove third-party plugins",
