@@ -20,7 +20,10 @@ printf '{"id":"fixture"}\n' > "$SEED/manifest.json"
 git -C "$SEED" add manifest.json
 git -C "$SEED" commit -qm "initial"
 git -C "$SEED" remote add origin "$REMOTE"
-git -C "$SEED" push -q -u origin main
+# Fixture pushes must not inherit the user's global hooks. Those hooks may
+# intentionally reject non-GitHub remotes, while this test uses a local bare
+# repository by design.
+git -C "$SEED" -c core.hooksPath=/dev/null push -q -u origin main
 
 # Keep one checkout at the initial commit. It becomes behind after the second
 # upstream commit, and a local commit on a copy of it creates a divergence.
@@ -30,7 +33,7 @@ git clone -q "$REMOTE" "$PLUGINS/diverged"
 printf '{"id":"fixture","version":2}\n' > "$SEED/manifest.json"
 git -C "$SEED" add manifest.json
 git -C "$SEED" commit -qm "upstream update"
-git -C "$SEED" push -q
+git -C "$SEED" -c core.hooksPath=/dev/null push -q
 
 git clone -q "$REMOTE" "$PLUGINS/current"
 git clone -q "$REMOTE" "$PLUGINS/dirty"
