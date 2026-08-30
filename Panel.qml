@@ -55,6 +55,7 @@ Panel {
   property var marketplaceMap: ({})
   property bool marketplaceFetching: false
   property string marketplaceFetchedAt: ""
+  property string marketplaceHelperPath: ""
 
   // Local HEAD commit for every git-managed plugin dir, keyed by folder name.
   // Filled alongside the repo remote scan so rows can compare the installed
@@ -811,23 +812,29 @@ Panel {
     root.updateSummary = message || "Update interrupted. Check again."
   }
 
-  // Fetches the public marketplace catalog (capped at 2 MB like every other
-  // retained output) and builds the id -> {verified} map.
+  // Fetches the public marketplace catalog and builds the id -> {verified}
+  // map. Let curl enforce the limit so an oversized response is rejected
+  // instead of being truncated into invalid JSON.
   function fetchMarketplace() {
-    if (root.marketplaceFetching) return
+    if (root.marketplaceFetching || root.marketplaceHelperPath === "") return
     root.marketplaceFetching = true
-    marketplaceProcess.command = ["bash", "-c",
-      "curl -fsSL --max-time 20 https://omarchyplugins.com/catalog.json 2>/dev/null | head -c 4194304; true"]
+    marketplaceProcess.command = [root.marketplaceHelperPath]
     marketplaceProcess.running = true
   }
 
   function applyMarketplaceCatalog(text) {
     root.marketplaceFetching = false
-    root.marketplaceFetchedAt = String(new Date().toISOString())
+    var raw = String(text || "").trim()
+    if (raw === "") {
+      console.log("marketplace catalog fetch returned no data")
+      return
+    }
     var map = {}
     try {
-      var catalog = JSON.parse(String(text || "{}"))
-      var plugins = catalog.plugins || []
+      var catalog = JSON.parse(raw)
+      if (!catalog || typeof catalog !== "object" || !Array.isArray(catalog.plugins))
+        throw new Error("catalog.plugins is not an array")
+      var plugins = catalog.plugins
       for (var i = 0; i < plugins.length; i++) {
         var entry = plugins[i]
         if (!entry || typeof entry.id !== "string" || !entry.id) continue
@@ -844,11 +851,17 @@ Panel {
       return
     }
     root.marketplaceMap = map
+    root.marketplaceFetchedAt = String(new Date().toISOString())
     console.log("marketplace entries:", Object.keys(map).length)
   }
 
   property Process marketplaceProcess: Process {
     onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.marketplaceFetching = false
+        console.log("marketplace catalog fetch failed:", exitCode)
+        return
+      }
       root.applyMarketplaceCatalog(marketplaceStdout.text)
     }
     stdout: StdioCollector {
@@ -1358,6 +1371,7 @@ Panel {
 
   Component.onCompleted: {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
+    root.marketplaceHelperPath = String(Qt.resolvedUrl("marketplace-catalog.sh")).replace(/^file:\/\//, "")
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
