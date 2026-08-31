@@ -37,6 +37,40 @@ Panel {
   property var pluginRows: []
   property var rememberedBarStates: ({})
 
+  // Per-widget overrides read from omaplug's own shell.json layout entry.
+  // BarWidget.qml forwards this once the bar host injects it. We use it to
+  // remember which bar section freshly enabled bar-widget plugins land in.
+  property var settings: ({})
+  readonly property var barSections: ["left", "center", "right"]
+  // Where `setPluginEnabled` drops a bar-widget that has no remembered spot.
+  // Bound to the persisted setting; the section dropdown reassigns it.
+  property string targetSection: (root.settings
+      && root.barSections.indexOf(String(root.settings.defaultSection)) !== -1)
+    ? String(root.settings.defaultSection) : "center"
+
+  // Persist the chosen section into omaplug's own bar entry in shell.json,
+  // reusing the same registry path restoreBarSettings() uses for plugins.
+  function persistTargetSection(value) {
+    var reg = root.registry
+    if (!reg || typeof reg.setBarWidget !== "function") return
+    var error = reg.setBarWidget("omaplug", "defaultSection", value, {})
+    if (error) console.warn("omaplug: could not persist defaultSection: " + error)
+  }
+
+  // Move an already-placed bar-widget plugin to another bar section. Lands it
+  // at that section's usual anchor spot, matching `omarchy bar move`.
+  function movePlugin(id, section) {
+    var reg = root.registry
+    if (!reg || typeof reg.moveBarWidget !== "function") return
+    if (root.barSections.indexOf(section) === -1) return
+    var error = reg.moveBarWidget(id, { section: section })
+    if (error) {
+      console.warn("omaplug: could not move " + id + " to " + section + ": " + error)
+      return
+    }
+    root.refreshPlugins()
+  }
+
   // The shell injects the PluginRegistry into the bar's `shell` (the built-in
   // Bar.qml exposes no `pluginRegistry` property itself), so resolve it there
   // with a fallback for custom bars that do carry the registry directly.
@@ -1319,7 +1353,9 @@ Panel {
     var current = value ? null : root.barStateFor(id)
     var changed = remembered
       ? reg.setEnabled(id, true, remembered)
-      : reg.setEnabled(id, value)
+      : (value
+        ? reg.setEnabled(id, true, { section: root.targetSection })
+        : reg.setEnabled(id, false))
     if (!changed) return
     if (!value && current) root.rememberBarState(id, current)
     else if (value && remembered) {
@@ -1543,7 +1579,7 @@ Panel {
       PanelKeyCatcher {
         id: keyCatcher
         anchors.fill: parent
-        blocked: searchField.activeFocus || filterDropdown.popupOpen
+        blocked: searchField.activeFocus || filterDropdown.popupOpen || sectionDropdown.popupOpen
         onCloseRequested: root.close()
         onTabRequested: function(direction) { root.switchPanel(direction) }
       }
@@ -1609,6 +1645,41 @@ Panel {
               if (!root.removeSelectMode) root.removeSelection = {}
             }
           }
+        }
+
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: Style.space(6)
+
+          Label {
+            text: "New plugins go to"
+            color: root.contentForeground
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Dropdown {
+            id: sectionDropdown
+            Layout.preferredWidth: Style.space(110)
+            showLabel: false
+            value: root.targetSection
+            options: [
+              { value: "left", label: "Left" },
+              { value: "center", label: "Center" },
+              { value: "right", label: "Right" }
+            ]
+            foreground: root.contentForeground
+            background: root.panelBackground
+            popupBorder: Util.alpha(root.contentForeground, 0.2)
+            accent: Color.accent
+            fontFamily: root.contentFontFamily
+            onChanged: function(v) {
+              root.targetSection = v
+              root.persistTargetSection(v)
+            }
+          }
+
+          Item { Layout.fillWidth: true }
         }
 
         RowLayout {
@@ -1802,6 +1873,9 @@ Panel {
       foreground: root.contentForeground
       fontFamily: root.contentFontFamily
       panelBackground: root.panelBackground
+      pluginSection: rowMenuOverlay.plugin
+        ? ((root.barStateFor(rowMenuOverlay.plugin.id) || {}).section || "")
+        : ""
 
       onCloseRequested: root.closeRowMenu()
       onEnabledChangeRequested: function(pluginId, enabled) {
@@ -1809,6 +1883,10 @@ Panel {
       }
       onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
       onRemovalRequested: function(pluginId) { root.removePlugin(pluginId) }
+      onMoveRequested: function(pluginId, section) {
+        root.movePlugin(pluginId, section)
+        root.closeRowMenu()
+      }
     }
 
     Dialogs.Confirm {
