@@ -1,7 +1,7 @@
 .pragma library
 
 function marketplaceUrl(pluginId) {
-  return "https://omarchyplugins.com/plugin.html?id=" + encodeURIComponent(String(pluginId))
+  return "https://plugins.omarchy.org/plugin.html?id=" + encodeURIComponent(String(pluginId))
 }
 
 function listingChecksUrl(pluginId) {

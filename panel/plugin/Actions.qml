@@ -23,8 +23,7 @@ ColumnLayout {
   signal updateRequested(string sourceKey)
   signal menuRequested(var sourceItem, real x, real y)
 
-  readonly property bool showSourceRow: (plugin.updatable && repoKnown)
-    || (plugin.updatable && updateState === "UPDATE")
+  readonly property bool showSourceRow: plugin.updatable && repoKnown
 
   Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
   spacing: Style.space(4)
@@ -125,25 +124,6 @@ ColumnLayout {
       verticalPadding: Style.space(3)
       Layout.fillWidth: true
       onClicked: actions.sourceRequested(actions.plugin.sourceKey)
-    }
-
-    Button {
-      id: updateButton
-
-      visible: actions.plugin.updatable && actions.updateState === "UPDATE"
-      text: actions.updatingId === actions.plugin.sourceKey ? "Updating…" : "Update"
-      enabled: !actions.updateRunning
-      bordered: true
-      borderSpec: updateButton.hot ? Border.none()
-        : Border.controlSpec("normal", updateButton.foreground, Color.accent)
-      foreground: actions.foreground
-      accent: Color.accent
-      fontFamily: actions.fontFamily
-      fontSize: Style.font.caption
-      horizontalPadding: Style.space(8)
-      verticalPadding: Style.space(3)
-      Layout.fillWidth: true
-      onClicked: actions.updateRequested(actions.plugin.sourceKey)
     }
   }
 }

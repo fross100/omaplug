@@ -18,6 +18,9 @@ Rectangle {
 
   required property var rows
   required property var updateStates
+  required property var marketplaceMap
+  required property bool marketplaceFetching
+  required property bool marketplaceFetchFailed
   required property bool checking
   required property bool updateRunning
   required property bool updatingAll
@@ -61,6 +64,26 @@ Rectangle {
     if (state === "CURRENT") return Qt.darker(foreground, 1.6)
     if (state === "LOCAL_CHANGES" || state === "LOCAL") return Qt.darker(foreground, 1.5)
     return Qt.darker(foreground, 1.4)
+  }
+
+  function verificationText(id) {
+    var entry = marketplaceMap[String(id)]
+    if (entry) {
+      if (entry.verified === true) return "Verified"
+      if (entry.snapshotStatus === "update-unverified") return "Update unverified"
+      return "Unverified"
+    }
+    if (marketplaceFetching) return "Checking verification…"
+    if (marketplaceFetchFailed) return "Verification unavailable"
+    return "Not listed"
+  }
+
+  function verificationColor(id) {
+    var entry = marketplaceMap[String(id)]
+    if (entry && entry.verified === true) return Color.accent
+    if (entry && entry.snapshotStatus === "update-unverified")
+      return Qt.hsla(0.12, 0.75, 0.55, 1)
+    return Qt.darker(foreground, 1.6)
   }
 
   Loader {
@@ -210,12 +233,33 @@ Rectangle {
                     elide: Label.ElideRight
                   }
 
-                  Label {
-                    text: page.statusText(updateRow.modelData.sourceKey)
-                    textFormat: Text.PlainText
-                    color: page.statusColor(updateRow.modelData.sourceKey)
-                    font.family: page.fontFamily
-                    font.pixelSize: Style.font.caption
+                  RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Style.space(5)
+
+                    Label {
+                      text: page.statusText(updateRow.modelData.sourceKey)
+                      textFormat: Text.PlainText
+                      color: page.statusColor(updateRow.modelData.sourceKey)
+                      font.family: page.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+
+                    Label {
+                      text: "·"
+                      textFormat: Text.PlainText
+                      color: Qt.darker(page.foreground, 2.0)
+                      font.family: page.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+
+                    Label {
+                      text: page.verificationText(updateRow.modelData.id)
+                      textFormat: Text.PlainText
+                      color: page.verificationColor(updateRow.modelData.id)
+                      font.family: page.fontFamily
+                      font.pixelSize: Style.font.caption
+                    }
                   }
 
                   Text {

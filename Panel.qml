@@ -54,6 +54,7 @@ Panel {
   // verification badge and a "View on marketplace" link for listed plugins.
   property var marketplaceMap: ({})
   property bool marketplaceFetching: false
+  property bool marketplaceFetchFailed: false
   property string marketplaceFetchedAt: ""
 
   // Local HEAD commit for every git-managed plugin dir, keyed by folder name.
@@ -816,8 +817,9 @@ Panel {
   function fetchMarketplace() {
     if (root.marketplaceFetching) return
     root.marketplaceFetching = true
-    marketplaceProcess.command = ["bash", "-c",
-      "curl -fsSL --max-time 20 https://omarchyplugins.com/catalog.json 2>/dev/null | head -c 4194304; true"]
+    root.marketplaceFetchFailed = false
+    marketplaceProcess.command = ["curl", "-fsSL", "--max-time", "20", "--max-filesize", "8388608",
+      "https://plugins.omarchy.org/catalog.json"]
     marketplaceProcess.running = true
   }
 
@@ -849,6 +851,12 @@ Panel {
 
   property Process marketplaceProcess: Process {
     onExited: function(exitCode) {
+      if (exitCode !== 0) {
+        root.marketplaceFetching = false
+        root.marketplaceFetchFailed = true
+        console.log("marketplace catalog fetch failed, exit code:", exitCode)
+        return
+      }
       root.applyMarketplaceCatalog(marketplaceStdout.text)
     }
     stdout: StdioCollector {
@@ -1496,7 +1504,7 @@ Panel {
                 horizontalPadding: Style.space(8)
                 verticalPadding: Style.space(3)
                 Layout.alignment: Qt.AlignVCenter
-                onClicked: Qt.openUrlExternally("https://omarchyplugins.com")
+                onClicked: Qt.openUrlExternally("https://plugins.omarchy.org")
               }
 
               Button {
@@ -1771,6 +1779,9 @@ Panel {
       panelBackground: root.panelBackground
       rows: root.updateCheckRows
       updateStates: root.updateStates
+      marketplaceMap: root.marketplaceMap
+      marketplaceFetching: root.marketplaceFetching
+      marketplaceFetchFailed: root.marketplaceFetchFailed
       checking: root.checkingUpdates
       updateRunning: root.updateDetachedRunning
       updatingAll: root.updatingAll
@@ -1798,6 +1809,10 @@ Panel {
       repoKnown: rowMenuOverlay.plugin
         && rowMenuOverlay.plugin.sourceKey !== ""
         && root.pluginRepos[rowMenuOverlay.plugin.sourceKey] !== undefined
+      updateState: rowMenuOverlay.plugin
+        ? String(root.updateStates[rowMenuOverlay.plugin.sourceKey] || "")
+        : ""
+      updateRunning: root.updateDetachedRunning
       requestedPosition: root.rowMenuPos
       foreground: root.contentForeground
       fontFamily: root.contentFontFamily
@@ -1808,6 +1823,7 @@ Panel {
         root.setPluginEnabled(pluginId, enabled)
       }
       onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
+      onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onRemovalRequested: function(pluginId) { root.removePlugin(pluginId) }
     }
 

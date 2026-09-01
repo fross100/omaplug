@@ -38,6 +38,8 @@ Item {
 
   readonly property bool listed: marketplaceEntry !== null
   readonly property bool verified: listed && marketplaceEntry.verified === true
+  readonly property bool updateUnverified: listed && !verified
+    && marketplaceEntry.snapshotStatus === "update-unverified"
   readonly property string authorUrl: modelData.firstParty ? "" : Presentation.authorUrl(repoUrl)
   readonly property string kindLabel: Presentation.kindLabel(modelData.kinds, knownKinds)
 
@@ -79,25 +81,45 @@ Item {
         onClicked: pluginRow.removalSelectionRequested(pluginRow.modelData.id)
       }
 
-      Rectangle {
+      Item {
         Layout.preferredWidth: Style.space(28)
-        Layout.preferredHeight: Layout.preferredWidth
-        radius: 6
-        clip: true
-        color: Presentation.iconColor(pluginRow.modelData.name)
+        Layout.preferredHeight: Style.space(28)
 
-        Text {
-          anchors.centerIn: parent
-          width: parent.width - 4
-          horizontalAlignment: Text.AlignHCenter
-          elide: Text.ElideRight
-          maximumLineCount: 1
-          text: pluginRow.icon || pluginRow.modelData.name.trim().charAt(0).toUpperCase()
-          textFormat: Text.PlainText
-          color: "white"
-          font.family: pluginRow.fontFamily
-          font.pixelSize: Style.font.bodySmall
-          font.bold: true
+        Rectangle {
+          x: 0
+          y: 0
+          width: Style.space(28)
+          height: Style.space(28)
+          radius: 6
+          clip: true
+          color: Presentation.iconColor(pluginRow.modelData.name)
+
+          Text {
+            anchors.centerIn: parent
+            width: parent.width - 4
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            maximumLineCount: 1
+            text: pluginRow.icon || pluginRow.modelData.name.trim().charAt(0).toUpperCase()
+            textFormat: Text.PlainText
+            color: "white"
+            font.family: pluginRow.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            font.bold: true
+          }
+        }
+
+        Rectangle {
+          visible: pluginRow.updateState === "UPDATE"
+          x: -2
+          y: -2
+          width: 8
+          height: 8
+          radius: 4
+          color: Color.accent
+          border.color: pluginRow.foreground
+          border.width: 1
+          z: 1
         }
       }
 
@@ -131,7 +153,9 @@ Item {
             implicitHeight: Style.space(16)
             color: pluginRow.verified
               ? Util.alpha(Color.accent, 0.18)
-              : Qt.rgba(pluginRow.foreground.r, pluginRow.foreground.g, pluginRow.foreground.b, 0.08)
+              : pluginRow.updateUnverified
+                ? Qt.rgba(0.85, 0.65, 0.13, 0.18)
+                : Qt.rgba(pluginRow.foreground.r, pluginRow.foreground.g, pluginRow.foreground.b, 0.08)
 
             Row {
               id: badgeContent
@@ -149,9 +173,21 @@ Item {
               }
 
               Text {
-                text: pluginRow.verified ? "Verified" : "Unverified"
+                visible: pluginRow.updateUnverified
+                text: "\uf071"
                 textFormat: Text.PlainText
-                color: pluginRow.verified ? Color.accent : Qt.darker(pluginRow.foreground, 2.0)
+                color: Qt.hsla(0.12, 0.75, 0.55, 1)
+                font.family: pluginRow.fontFamily
+                font.pixelSize: Style.font.caption - 1
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                text: pluginRow.verified ? "Verified" : pluginRow.updateUnverified ? "Update unverified" : "Unverified"
+                textFormat: Text.PlainText
+                color: pluginRow.verified ? Color.accent
+                  : pluginRow.updateUnverified ? Qt.hsla(0.12, 0.75, 0.55, 1)
+                  : Qt.darker(pluginRow.foreground, 2.0)
                 font.family: pluginRow.fontFamily
                 font.pixelSize: Style.font.caption - 1
                 anchors.verticalCenter: parent.verticalCenter

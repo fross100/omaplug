@@ -13,6 +13,8 @@ Rectangle {
   required property var plugin
   required property bool pluginEnabled
   required property bool repoKnown
+  required property string updateState
+  required property bool updateRunning
   required property point requestedPosition
   required property color foreground
   required property string fontFamily
@@ -21,6 +23,7 @@ Rectangle {
   signal closeRequested
   signal enabledChangeRequested(string pluginId, bool enabled)
   signal sourceRequested(string sourceKey)
+  signal updateRequested(string sourceKey)
   signal removalRequested(string pluginId)
 
   visible: open
@@ -86,6 +89,24 @@ Rectangle {
         Layout.alignment: Qt.AlignLeft
         onClicked: {
           menu.sourceRequested(menu.plugin.sourceKey)
+          menu.closeRequested()
+        }
+      }
+
+      Button {
+        visible: menu.plugin && menu.plugin.updatable && menu.updateState === "UPDATE"
+        text: menu.updateRunning ? "Updating…" : "Update"
+        enabled: !menu.updateRunning
+        foreground: menu.foreground
+        accent: Color.accent
+        fontFamily: menu.fontFamily
+        fontSize: Style.font.bodySmall
+        horizontalPadding: Style.space(8)
+        verticalPadding: Style.space(5)
+        Layout.fillWidth: true
+        Layout.alignment: Qt.AlignLeft
+        onClicked: {
+          menu.updateRequested(menu.plugin.sourceKey)
           menu.closeRequested()
         }
       }
