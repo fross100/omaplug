@@ -43,6 +43,7 @@ Omaplug is listed on the marketplace: [plugins.omarchy.org/plugin.html?id=omaplu
 ## What it can do
 
 - **🔌 Enable / disable** — every discovered plugin (Omarchy's own and third-party) gets a simple toggle. Flipping it goes through the same registry the `omarchy plugin enable/disable` command uses, so what you see here is always what's really running.
+- **↕️ Reorder the bar** — drag widgets to reorder them within a section, or between the left/center/right sections, with a live preview. Nothing changes on the bar until you hit Save — no restart needed, it applies instantly.
 - **🔄 Check for updates** — scans every installed third-party plugin and distinguishes clean updates from local plugins, symlinked development plugins, local changes, and genuine fetch errors.
 - **⬆️ Update (or update everything)** — apply one update, or finish every proven-safe pending update from a single click, even while Omarchy reloads changed plugins.
 - **➕ Install** — paste a git repo URL and add a plugin in one step. It'll warn you first that plugins run as unsandboxed code, because honesty is the default here.

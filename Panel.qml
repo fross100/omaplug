@@ -209,6 +209,12 @@ Panel {
   // relaunches the shell so plugins reload from source (fixes stale compiled
   // plugin QML that a live rescan would keep serving).
   property bool restartConfirmOpen: false
+  // Drag-and-drop bar reorder popup. The snapshot is taken explicitly when
+  // the popup opens (not a live binding) so the dialog gets a stable layout
+  // to preview against instead of one that could shift under an in-progress
+  // drag if something else touched the bar concurrently.
+  property bool reorderDialogOpen: false
+  property var reorderLayoutSnapshot: ({ left: [], center: [], right: [] })
   // Right-click context menu on a main-page row.
   property bool rowMenuOpen: false
   property string rowMenuId: ""
@@ -1262,6 +1268,57 @@ Panel {
     root.scanPluginRepos()
   }
 
+  // Snapshot of every widget currently on the bar, grouped by section, for
+  // the reorder popup. Reads the same shellConfigProvider().bar.layout
+  // barStateFor() reads below, plus the name/icon lookups already used
+  // elsewhere in this file (installedPlugins, iconFor).
+  function currentBarLayout() {
+    var reg = root.registry
+    var config = reg && typeof reg.shellConfigProvider === "function"
+      ? reg.shellConfigProvider()
+      : null
+    var layout = config && config.bar ? config.bar.layout : null
+    var result = { left: [], center: [], right: [] }
+    if (!layout) return result
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var entries = Array.isArray(layout[sections[s]]) ? layout[sections[s]] : []
+      for (var i = 0; i < entries.length; i++) {
+        var id = reg && typeof reg.barEntryId === "function"
+          ? reg.barEntryId(entries[i])
+          : (entries[i] && typeof entries[i] === "object" ? entries[i].id : entries[i])
+        id = String(id || "")
+        if (id === "") continue
+        var manifest = reg && reg.installedPlugins ? reg.installedPlugins[id] : null
+        result[sections[s]].push({
+          widgetId: id,
+          label: (manifest && manifest.name) || id,
+          icon: root.iconFor(id)
+        })
+      }
+    }
+    return result
+  }
+
+  // Applies a { left, center, right } id order (from the reorder popup) via
+  // the registry's moveBarWidget — the same verb `omarchy bar move` and this
+  // plugin's own enable/disable actions already use, so it stays live and
+  // persisted the same way. Placing ids in ascending target-index order
+  // converges to the exact desired permutation in one pass regardless of
+  // where an id currently sits, including across sections.
+  function applyBarOrder(order) {
+    var reg = root.registry
+    if (!reg || typeof reg.moveBarWidget !== "function" || !order) return
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var ids = Array.isArray(order[sections[s]]) ? order[sections[s]] : []
+      for (var i = 0; i < ids.length; i++) {
+        var error = reg.moveBarWidget(String(ids[i]), { section: sections[s], index: i })
+        if (error) console.warn("Could not move " + ids[i] + ": " + error)
+      }
+    }
+  }
+
   function barStateFor(id) {
     var reg = root.registry
     var config = reg && typeof reg.shellConfigProvider === "function"
@@ -1505,6 +1562,24 @@ Panel {
                 verticalPadding: Style.space(3)
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: Qt.openUrlExternally("https://plugins.omarchy.org")
+              }
+
+              Button {
+                id: reorderBarButton
+                text: "\uf0dc  Reorder bar"
+                tooltipText: "Drag and drop to reorder the widgets on the bar"
+                bordered: true
+                foreground: root.contentForeground
+                accent: Color.accent
+                fontFamily: root.contentFontFamily
+                fontSize: Style.font.caption
+                horizontalPadding: Style.space(8)
+                verticalPadding: Style.space(3)
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: {
+                  root.reorderLayoutSnapshot = root.currentBarLayout()
+                  root.reorderDialogOpen = true
+                }
               }
 
               Button {
@@ -1902,6 +1977,23 @@ Panel {
 
       onCancelRequested: root.cancelInstallConfirm()
       onConfirmRequested: root.installPlugin()
+    }
+
+    Dialogs.Reorder {
+      anchors.fill: parent
+      z: 12000
+
+      open: root.reorderDialogOpen
+      layout: root.reorderLayoutSnapshot
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
+
+      onCloseRequested: root.reorderDialogOpen = false
+      onSaveRequested: function(order) {
+        root.applyBarOrder(order)
+        root.reorderDialogOpen = false
+      }
     }
   }
 }
