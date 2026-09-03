@@ -1306,6 +1306,12 @@ Panel {
   // persisted the same way. Placing ids in ascending target-index order
   // converges to the exact desired permutation in one pass regardless of
   // where an id currently sits, including across sections.
+  //
+  // Only widgets whose (section, index) actually changed get a moveBarWidget
+  // call: each call live-reflows the real bar (this plugin's own toggle icon
+  // included), so calling it for entries that never moved was churning that
+  // reflow once per widget on the whole bar for no reason - including once
+  // Save had nothing left to apply.
   function applyBarOrder(order) {
     var reg = root.registry
     if (!reg || typeof reg.moveBarWidget !== "function" || !order) return
@@ -1313,8 +1319,11 @@ Panel {
     for (var s = 0; s < sections.length; s++) {
       var ids = Array.isArray(order[sections[s]]) ? order[sections[s]] : []
       for (var i = 0; i < ids.length; i++) {
-        var error = reg.moveBarWidget(String(ids[i]), { section: sections[s], index: i })
-        if (error) console.warn("Could not move " + ids[i] + ": " + error)
+        var id = String(ids[i])
+        var current = root.barStateFor(id)
+        if (current && current.section === sections[s] && current.index === i) continue
+        var error = reg.moveBarWidget(id, { section: sections[s], index: i })
+        if (error) console.warn("Could not move " + id + ": " + error)
       }
     }
   }
@@ -1988,8 +1997,10 @@ Panel {
 
       onCloseRequested: root.reorderDialogOpen = false
       onSaveRequested: function(order) {
-        root.applyBarOrder(order)
+        // Close first, apply after: applyBarOrder() live-reflows the real
+        // bar, so run it once this popup is no longer the thing on screen.
         root.reorderDialogOpen = false
+        Qt.callLater(function() { root.applyBarOrder(order) })
       }
     }
   }
