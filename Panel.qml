@@ -1565,24 +1565,6 @@ Panel {
               }
 
               Button {
-                id: reorderBarButton
-                text: "\uf0dc  Reorder bar"
-                tooltipText: "Drag and drop to reorder the widgets on the bar"
-                bordered: true
-                foreground: root.contentForeground
-                accent: Color.accent
-                fontFamily: root.contentFontFamily
-                fontSize: Style.font.caption
-                horizontalPadding: Style.space(8)
-                verticalPadding: Style.space(3)
-                Layout.alignment: Qt.AlignVCenter
-                onClicked: {
-                  root.reorderLayoutSnapshot = root.currentBarLayout()
-                  root.reorderDialogOpen = true
-                }
-              }
-
-              Button {
                 id: restartShellButton
                 text: "\uf021  Restart shell"
                 tooltipText: "Clear the QML cache and restart the shell so every plugin reloads from source"
@@ -1662,6 +1644,21 @@ Panel {
             onClicked: {
               root.updatesPageOpen = true
               if (!root.checkingUpdates) root.checkUpdates()
+            }
+          }
+
+          Button {
+            iconText: "\uf0dc"
+            tooltipText: "Reorder bar"
+            foreground: root.contentForeground
+            accent: Color.accent
+            fontFamily: root.contentFontFamily
+            fontSize: Style.font.bodySmall
+            horizontalPadding: Style.space(10)
+            verticalPadding: Style.space(5)
+            onClicked: {
+              root.reorderLayoutSnapshot = root.currentBarLayout()
+              root.reorderDialogOpen = true
             }
           }
 

@@ -25,7 +25,13 @@ Item {
   signal dragMoved(var pos)
   signal dragEnded
 
-  opacity: dragging ? 0.35 : 1
+  // Fully hidden (not just dimmed) while dragging: it stays parked at its
+  // original index for the duration of the gesture (see Reorder.qml's
+  // previewY), and other rows sliding into "the gap it left" during the
+  // live preview can land on that exact slot — dimming would show both
+  // texts overlapping there. The floating ghost plus the gap in the list
+  // are enough feedback without it being visible too.
+  opacity: dragging ? 0 : 1
   Behavior on y { enabled: !row.dragging; NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
 
   Rectangle {
