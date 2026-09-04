@@ -96,6 +96,8 @@ A review of a typical plugin costs well under a dollar on the default model and 
 { "id": "omaplug", "reviewModel": "claude-opus-5", "reviewEffort": "medium" }
 ```
 
+Don't use Claude? Set `"reviewEnabled": false` on the widget and installs go straight to the confirmation, exactly as before.
+
 The same knobs, plus budget and timeout, are environment variables on the shell process:
 
 | Variable | Default | Meaning |

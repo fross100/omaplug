@@ -19,9 +19,16 @@
     "allowMultiple": false,
     "defaults": {
       "reviewModel": "claude-fable-5-1",
-      "reviewEffort": "high"
+      "reviewEffort": "high",
+      "reviewEnabled": true
     },
     "schema": [
+      {
+        "key": "reviewEnabled",
+        "type": "boolean",
+        "label": "Review plugins with Claude before installing",
+        "defaultValue": true
+      },
       {
         "key": "reviewModel",
         "type": "string",

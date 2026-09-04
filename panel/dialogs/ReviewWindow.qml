@@ -45,6 +45,9 @@ Item {
   signal installRequested
 
   readonly property bool hasReview: review !== null && typeof review === "object"
+  // A review that was switched off is not a failure to explain away: no
+  // Retry, and no suggestion that retrying would help.
+  readonly property bool reviewOff: failed && errorText.indexOf("turned off") >= 0
   readonly property string verdict: hasReview ? String(review.verdict) : ""
   readonly property color cautionColor: Qt.hsla(0.12, 0.75, 0.55, 1)
   readonly property color dimForeground: Qt.darker(foreground, 1.6)
@@ -298,7 +301,9 @@ Item {
 
             Text {
               visible: dialog.failed && !dialog.running
-              text: "You can retry, or install without a review — in which case read the code yourself before enabling it."
+              text: dialog.reviewOff
+                ? "Turn it back on with the widget's reviewEnabled setting. Installing now means reading the code yourself before you enable it."
+                : "You can retry, or install without a review — in which case read the code yourself before enabling it."
               textFormat: Text.PlainText
               color: dialog.dimForeground
               font.family: dialog.fontFamily
@@ -455,7 +460,9 @@ Item {
           }
 
           Button {
-            visible: dialog.failed && !dialog.running
+            // Retry makes sense for a review that could not run, not for one
+            // that was switched off.
+            visible: dialog.failed && !dialog.running && !dialog.reviewOff
             text: "Retry"
             foreground: dialog.foreground
             accent: Color.accent

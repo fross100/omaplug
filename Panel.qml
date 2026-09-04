@@ -24,7 +24,6 @@ Panel {
   manageIpc: false
 
   property var anchorItem: null
-  property var settings: null
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
 
@@ -206,6 +205,7 @@ Panel {
   // Model and effort come from the widget's settings in shell.json (see the
   // manifest schema); anything that is not a plain model id or a known effort
   // level falls back to the default rather than reaching the helper's argv.
+  readonly property bool reviewEnabled: !(root.settings && root.settings.reviewEnabled === false)
   readonly property string reviewModel: {
     var v = root.settings && root.settings.reviewModel ? String(root.settings.reviewModel).trim() : ""
     return /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(v) ? v : "claude-fable-5-1"
@@ -1184,11 +1184,17 @@ Panel {
   }
 
   function startInstallReview(url) {
-    if (root.reviewHelperPath === "") {
+    // Opting out keeps the same window and the same final say; it just
+    // arrives without a verdict, the way "Install without review" does.
+    if (!root.reviewEnabled || root.reviewHelperPath === "") {
+      root.installReview = null
+      root.installReviewedCommit = ""
       root.installReviewOpen = true
       root.installReviewRunning = false
       root.installReviewFailed = true
-      root.installReviewError = "Review helper not found"
+      root.installReviewError = root.reviewEnabled
+        ? "Review helper not found"
+        : "Pre-install review is turned off for this widget (reviewEnabled)."
       return
     }
     if (installReviewProcess.running) installReviewProcess.signal(9)
@@ -1639,6 +1645,10 @@ Panel {
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
     root.reviewHelperPath = String(Qt.resolvedUrl("review-helper.sh")).replace(/^file:\/\//, "")
+    // A review does not survive a shell reload (its state lives here), so
+    // any review-* dir left under the runtime root is an orphan.
+    if (root.updateStateRoot !== "" && root.updateStateRoot.indexOf("..") === -1)
+      Quickshell.execDetached(["bash", "-c", 'for d in "$0"/review-*/; do [ -d "$d" ] && rm -rf -- "$d"; done', root.updateStateRoot])
     refreshPlugins()
     fetchMarketplace()
     Qt.callLater(function() { updateStatusFile.reload() })
