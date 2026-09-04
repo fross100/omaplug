@@ -68,7 +68,7 @@ Rectangle {
       }
 
       Text {
-        text: "Plugins run as arbitrary, unsandboxed code inside your omarchy-shell process. Only add repos you trust — review the code before you enable the plugin."
+        text: "Plugins run as arbitrary, unsandboxed code inside your omarchy-shell process. The repository is reviewed by Claude before anything is installed, and stays disabled until you enable it — but only add repos you trust."
         textFormat: Text.PlainText
         color: Qt.darker(dialog.foreground, 1.6)
         font.family: dialog.fontFamily
