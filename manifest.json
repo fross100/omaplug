@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "omaplug",
   "name": "Plugin Manager",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "author": "Fross",
   "license": "MIT",
   "description": "Manage installed Omarchy plugins: enable/disable, update, install from git, and remove third-party plugins",
@@ -16,6 +16,24 @@
     "displayName": "Plugin Manager",
     "description": "Enable/disable, update, install, and remove plugins",
     "category": "System",
-    "allowMultiple": false
+    "allowMultiple": false,
+    "defaults": {
+      "reviewModel": "claude-fable-5-1",
+      "reviewEffort": "high"
+    },
+    "schema": [
+      {
+        "key": "reviewModel",
+        "type": "string",
+        "label": "Pre-install review model (claude --model)",
+        "defaultValue": "claude-fable-5-1"
+      },
+      {
+        "key": "reviewEffort",
+        "type": "string",
+        "label": "Pre-install review effort (low, medium, high, xhigh, max)",
+        "defaultValue": "high"
+      }
+    ]
   }
 }

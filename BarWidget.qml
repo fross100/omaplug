@@ -59,6 +59,9 @@ BarWidget {
         function show(): void { root.open() }
         function hide(): void { root.close() }
         function toggle(): void { root.togglePanel() }
+        function install(url: string): void {
+            if (panelItem && typeof panelItem.installFromIpc === "function") panelItem.installFromIpc(url)
+        }
     }
 
     BarIconButton {
