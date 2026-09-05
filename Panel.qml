@@ -318,12 +318,10 @@ Panel {
   }
 
   function iconFor(id) {
-    // The clock widget's live button text is the current time, which reads
-    // like noise as a row icon — always show the clock glyph for it instead.
-    if (/clock/i.test(String(id))) return "\uf017"
-    var live = root.liveGlyphFor(id)
-    if (live && root.isStandaloneGlyph(live)) return live
+    // Screen Time puts a changing duration in its bar-button text. A row icon
+    // must be stable, so use its dedicated glyph instead of that live label.
     var map = {
+      "agx.screen-time":    "\udb81\udd1f",
       "omaplug":            "\udb85\udcd9",
       "adna.bar":            "\uf2f2",
       "adna.bar-switch":     "\uf2f2",
@@ -356,6 +354,9 @@ Panel {
       "omarchy.polkit":      "\uf3ed",
       "omarchy.reminders":   "\uf017"
     }
+    if (id === "agx.screen-time" || /clock/i.test(String(id))) return map[id] || "\uf017"
+    var live = root.liveGlyphFor(id)
+    if (live && root.isStandaloneGlyph(live)) return live
     return map[id] || ""
   }
 

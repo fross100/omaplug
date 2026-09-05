@@ -23,5 +23,7 @@ assert_contains 'marketplaceMap: root.marketplaceMap' "$PANEL"
 assert_contains 'marketplaceFetching: root.marketplaceFetching' "$PANEL"
 assert_contains 'marketplaceFetchFailed: root.marketplaceFetchFailed' "$PANEL"
 assert_contains '"--max-filesize", "8388608"' "$PANEL"
+assert_contains '"agx.screen-time":    "\udb81\udd1f"' "$PANEL"
+assert_contains 'id === "agx.screen-time"' "$PANEL"
 
 printf 'verification-status-test: ok\n'
