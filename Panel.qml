@@ -306,23 +306,26 @@ Panel {
     return ""
   }
 
-  function isStandaloneGlyph(text) {
-    var s = String(text || "").trim()
-    if (s.length === 0) return false
-    // Private-use glyphs (Nerd Fonts) live in U+E000-U+F8FF and surrogate pairs.
-    // A standalone tile should be 1-2 glyphs at most; anything longer with
-    // alphanumerics or spaced tokens like "1h 58m" is a live label, not an icon.
-    if (/[a-zA-Z0-9]/.test(s) && s.split(/\s+/).length > 1) return false
-    if (s.length > 4) return false
-    return /^[\uE000-\uF8FF\ud800-\udfff\s]+$/.test(s)
+  // A bar-button label can combine an icon with live state (durations,
+  // counters, temperatures, etc.). Keep only a leading Nerd Font glyph so
+  // that status text never leaks into a fixed-size plugin icon tile.
+  function leadingIconGlyph(text) {
+    var s = String(text || "")
+    if (s.length === 0) return ""
+
+    var first = s.charCodeAt(0)
+    if (first >= 0xE000 && first <= 0xF8FF) return s.charAt(0)
+    if (first < 0xD800 || first > 0xDBFF || s.length < 2) return ""
+
+    var second = s.charCodeAt(1)
+    if (second < 0xDC00 || second > 0xDFFF) return ""
+    var codePoint = (first - 0xD800) * 0x400 + second - 0xDC00 + 0x10000
+    // Nerd Font's supplementary glyphs are in the Supplementary Private Use
+    // Areas (planes 15 and 16). Do not turn arbitrary emoji into row icons.
+    return codePoint >= 0xF0000 && codePoint <= 0x10FFFD ? s.substring(0, 2) : ""
   }
 
   function iconFor(id) {
-    // The clock widget's live button text is the current time, which reads
-    // like noise as a row icon — always show the clock glyph for it instead.
-    if (/clock/i.test(String(id))) return "\uf017"
-    var live = root.liveGlyphFor(id)
-    if (live && root.isStandaloneGlyph(live)) return live
     var map = {
       "omaplug":            "\udb85\udcd9",
       "adna.bar":            "\uf2f2",
@@ -356,6 +359,9 @@ Panel {
       "omarchy.polkit":      "\uf3ed",
       "omarchy.reminders":   "\uf017"
     }
+    if (/clock/i.test(String(id))) return "\uf017"
+    var live = root.leadingIconGlyph(root.liveGlyphFor(id))
+    if (live) return live
     return map[id] || ""
   }
 
