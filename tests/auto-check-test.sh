@@ -109,7 +109,7 @@ assert_blocks_match PENDING-UPDATE-COUNT pending-update-count-in-sync
 # about what the real Timer's onTriggered calls. Pin that down directly so a
 # future edit can't quietly swap in a new/duplicate check function instead of
 # the one the manual "Check for updates" button already uses.
-grep -Fq 'onTriggered: root.checkUpdates()' "$ROOT/Panel.qml" || {
+grep -Fq 'onTriggered: root.checkUpdates(root.autoCheckCoordinatorPath)' "$ROOT/Panel.qml" || {
   printf 'FAIL: Panel.qml autoUpdateCheckTimer is not wired to the existing checkUpdates()\n' >&2
   exit 1
 }

@@ -199,6 +199,10 @@ Panel {
   // panel reconnects to the same job via this runtime status file.
   property string updateHelperPath: ""
   property string updateRunnerPath: ""
+  // Wraps plugin-state.sh with a lock+cache so the omaplug instance on each
+  // monitor's bar doesn't independently re-fetch every plugin's remote when
+  // the background timer (not a user click) is what triggered the check.
+  property string autoCheckCoordinatorPath: ""
   readonly property string updateStateRoot: {
     var runtime = Quickshell.env("XDG_RUNTIME_DIR")
     return runtime && runtime !== ""
@@ -603,10 +607,20 @@ Panel {
   // Fetches every git-managed plugin's remote and reports which are behind.
   // The script echoes a CHECK line before each plugin so the updates page can
   // show per-plugin progress while the fetch runs, then the result line.
-  function checkUpdates() {
+  //
+  // helperPath defaults to plugin-state.sh (the manual "Check for updates"
+  // button always uses this, unparameterized). The background Timer below
+  // instead passes autoCheckCoordinatorPath: the omaplug bar widget exists
+  // once per monitor, each running its own independent Panel.qml/Timer, so
+  // an unattended tick would otherwise fire N simultaneous, fully redundant
+  // fetch passes over every installed plugin. The coordinator wraps
+  // plugin-state.sh with a lock + shared cache so only one instance's timer
+  // tick actually runs it; the others reuse that output.
+  function checkUpdates(helperPath) {
     var reg = root.registry
     var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
-    if (!dir || root.updateHelperPath === "" || root.checkingUpdates || root.updateDetachedRunning) return
+    var helper = helperPath || root.updateHelperPath
+    if (!dir || helper === "" || root.checkingUpdates || root.updateDetachedRunning) return
     root.checkingUpdates = true
     root.updateSummary = ""
     // Deliberately not reset: this now also runs unattended in the
@@ -619,7 +633,7 @@ Panel {
     root.updateCheckLineBuf = ""
     root.updateCheckProcessed = 0
     root.checkWatchdog.restart()
-    updateCheckProcess.command = [root.updateHelperPath, dir]
+    updateCheckProcess.command = [helper, dir]
     updateCheckProcess.running = true
   }
 
@@ -635,7 +649,7 @@ Panel {
     running: root.autoCheckEnabled
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.checkUpdates()
+    onTriggered: root.checkUpdates(root.autoCheckCoordinatorPath)
   }
 
   // Per-line parser for plugin-state.sh output: tab-separated
@@ -1430,6 +1444,7 @@ Panel {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
+    root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
     fetchMarketplace()
     Qt.callLater(function() { updateStatusFile.reload() })
