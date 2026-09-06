@@ -82,8 +82,6 @@ BarWidget {
         visible: root.pendingUpdateCount > 0
         anchors.top: button.top
         anchors.right: button.right
-        anchors.topMargin: -Style.space(2)
-        anchors.rightMargin: -Style.space(2)
         z: 10
 
         readonly property string countText: root.pendingUpdateCount > 9 ? "9+" : String(root.pendingUpdateCount)
