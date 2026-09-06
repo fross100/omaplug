@@ -154,11 +154,15 @@ Panel {
   // Background auto-check: whether to poll for updates without the panel
   // being opened, and how often. Persisted in this widget's shell.json entry
   // so the choice survives shell restarts and is per-user, not per-checkout.
+  // Mirrored verbatim in tests/AutoCheckLogic.qml; keep both copies
+  // identical, or auto-check-test.sh's sync guard will fail the build.
+  // AUTOCHECK-SETTINGS-BEGIN
   readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", true) === true
   readonly property int autoCheckIntervalHours: {
     var hours = Number(root.setting("autoCheckIntervalHours", 6))
     return (isFinite(hours) && hours > 0) ? hours : 6
   }
+  // AUTOCHECK-SETTINGS-END
 
   function persistAutoCheckSetting(values) {
     var entry = { id: root.moduleName }
@@ -414,6 +418,9 @@ Panel {
     return count > 0 ? " (" + count + " error" + (count === 1 ? "" : "s") + ")" : ""
   }
 
+  // Mirrored verbatim in tests/AutoCheckLogic.qml; keep both copies
+  // identical, or auto-check-test.sh's sync guard will fail the build.
+  // PENDING-UPDATE-COUNT-BEGIN
   readonly property int pendingUpdateCount: {
     var n = 0
     for (var k in root.updateStates) {
@@ -422,6 +429,7 @@ Panel {
     }
     n
   }
+  // PENDING-UPDATE-COUNT-END
 
   readonly property int enabledPluginCount: {
     var n = 0
