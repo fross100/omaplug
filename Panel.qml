@@ -151,6 +151,36 @@ Panel {
     return kinds.indexOf(root.filterKind) !== -1
   }
 
+  // Background auto-check: whether to poll for updates without the panel
+  // being opened, and how often. Persisted in this widget's shell.json entry
+  // so the choice survives shell restarts and is per-user, not per-checkout.
+  readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", true) === true
+  readonly property int autoCheckIntervalHours: {
+    var hours = Number(root.setting("autoCheckIntervalHours", 6))
+    return (isFinite(hours) && hours > 0) ? hours : 6
+  }
+
+  function persistAutoCheckSetting(values) {
+    var entry = { id: root.moduleName }
+    for (var existing in root.settings) if (existing !== "id") entry[existing] = root.settings[existing]
+    for (var key in values) entry[key] = values[key]
+
+    root.settings = entry
+    if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
+    if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
+      root.bar.shell.updateEntryInline(root.moduleName, entry)
+  }
+
+  function setAutoCheckEnabled(value) {
+    root.persistAutoCheckSetting({ autoCheckUpdates: value === true })
+  }
+
+  function setAutoCheckIntervalHours(hours) {
+    var value = Number(hours)
+    if (!isFinite(value) || value <= 0) return
+    root.persistAutoCheckSetting({ autoCheckIntervalHours: value })
+  }
+
   // Update checking state, keyed by the plugin folder name (sourceKey).
   property var updateStates: ({})
   property bool checkingUpdates: false
@@ -574,6 +604,21 @@ Panel {
     root.checkWatchdog.restart()
     updateCheckProcess.command = [root.updateHelperPath, dir]
     updateCheckProcess.running = true
+  }
+
+  // Runs checkUpdates() on its own, whether or not the panel is open (the
+  // BarWidget's Loader keeps this item alive in the background). checkUpdates
+  // already no-ops while a check or an update is in flight, so this can't
+  // step on a user-initiated check. Toggling autoCheckEnabled pauses/resumes
+  // the timer immediately; changing autoCheckIntervalHours re-times it on the
+  // next tick without needing a restart.
+  Timer {
+    id: autoUpdateCheckTimer
+    interval: root.autoCheckIntervalHours * 3600000
+    running: root.autoCheckEnabled
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.checkUpdates()
   }
 
   // Per-line parser for plugin-state.sh output: tab-separated
@@ -1789,12 +1834,16 @@ Panel {
       summary: root.updateSummary
       iconFor: root.iconFor
       whatsNewUrlFor: root.whatsNewUrlFor
+      autoCheckEnabled: root.autoCheckEnabled
+      autoCheckIntervalHours: root.autoCheckIntervalHours
 
       onCloseRequested: root.updatesPageOpen = false
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onOpenUrlRequested: function(url) { root.openExternal(url) }
       onUpdatePluginRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onUpdateAllRequested: root.updateAll()
+      onAutoCheckEnabledRequested: function(value) { root.setAutoCheckEnabled(value) }
+      onAutoCheckIntervalRequested: function(hours) { root.setAutoCheckIntervalHours(hours) }
     }
 
 
