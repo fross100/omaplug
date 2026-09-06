@@ -129,6 +129,13 @@ assert_not_contains 'TIMER_FIRED' "$OUT" disabled-does-not-fire
 OUT=$(run '{"autoCheckIntervalHours":3}')
 assert_contains 'RESOLVED_HOURS 3' "$OUT" custom-hours
 
+# A fractional value must survive as-is, not truncate to 0 (which an `int`
+# property would silently do, turning into a zero-interval, tight-looping
+# Timer - not reachable through the shipped 1/3/6/12/24h picker, but settings
+# are hand-editable in shell.json).
+OUT=$(run '{"autoCheckIntervalHours":0.5}')
+assert_contains 'RESOLVED_HOURS 0.5' "$OUT" fractional-hours-not-truncated
+
 # Zero, negative, and non-numeric intervals all fall back to 6h rather than
 # producing a zero/negative-interval Timer (which would fire in a tight loop).
 OUT=$(run '{"autoCheckIntervalHours":0}')

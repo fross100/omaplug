@@ -31,7 +31,7 @@ Rectangle {
   required property var whatsNewUrlFor
 
   required property bool autoCheckEnabled
-  required property int autoCheckIntervalHours
+  required property real autoCheckIntervalHours
   readonly property var autoCheckIntervalChoices: [1, 3, 6, 12, 24]
 
   signal closeRequested
@@ -160,27 +160,16 @@ Rectangle {
               font.pixelSize: Style.font.bodySmall
             }
 
-            Repeater {
-              model: page.autoCheckIntervalChoices
-
-              delegate: Button {
-                id: intervalButton
-                required property int modelData
-                readonly property bool selected: modelData === page.autoCheckIntervalHours
-
-                text: modelData + "h"
-                bordered: true
-                borderSpec: intervalButton.selected
-                  ? Border.controlSpec("focus", intervalButton.foreground, Color.accent)
-                  : Border.controlSpec("normal", intervalButton.foreground, Color.accent)
-                foreground: page.foreground
-                accent: Color.accent
-                fontFamily: page.fontFamily
-                fontSize: Style.font.caption
-                horizontalPadding: Style.space(8)
-                verticalPadding: Style.space(3)
-                onClicked: page.autoCheckIntervalRequested(intervalButton.modelData)
-              }
+            ButtonGroup {
+              options: page.autoCheckIntervalChoices.map(function(h) {
+                return { value: String(h), label: h + "h" }
+              })
+              value: String(page.autoCheckIntervalHours)
+              foreground: page.foreground
+              accent: Color.accent
+              fontFamily: page.fontFamily
+              fontSize: Style.font.caption
+              onChanged: function(v) { page.autoCheckIntervalRequested(Number(v)) }
             }
 
             Item {

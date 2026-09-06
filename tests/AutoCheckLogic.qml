@@ -26,7 +26,10 @@ ShellRoot {
   // edit both or the build fails.
   // AUTOCHECK-SETTINGS-BEGIN
   readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", true) === true
-  readonly property int autoCheckIntervalHours: {
+  // real, not int: an int property truncates any fractional hours value
+  // (e.g. 0.5) towards zero, which would silently turn into a zero-interval
+  // Timer below and spin checkUpdates() in a tight loop.
+  readonly property real autoCheckIntervalHours: {
     var hours = Number(root.setting("autoCheckIntervalHours", 6))
     return (isFinite(hours) && hours > 0) ? hours : 6
   }

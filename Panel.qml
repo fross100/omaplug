@@ -158,7 +158,10 @@ Panel {
   // identical, or auto-check-test.sh's sync guard will fail the build.
   // AUTOCHECK-SETTINGS-BEGIN
   readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", true) === true
-  readonly property int autoCheckIntervalHours: {
+  // real, not int: an int property truncates any fractional hours value
+  // (e.g. 0.5) towards zero, which would silently turn into a zero-interval
+  // Timer below and spin checkUpdates() in a tight loop.
+  readonly property real autoCheckIntervalHours: {
     var hours = Number(root.setting("autoCheckIntervalHours", 6))
     return (isFinite(hours) && hours > 0) ? hours : 6
   }
@@ -606,7 +609,13 @@ Panel {
     if (!dir || root.updateHelperPath === "" || root.checkingUpdates || root.updateDetachedRunning) return
     root.checkingUpdates = true
     root.updateSummary = ""
-    root.updateStates = ({})
+    // Deliberately not reset: this now also runs unattended in the
+    // background (autoUpdateCheckTimer below), and blanking every row/the
+    // bar badge back to "Pending" for the duration of a check the user never
+    // asked for would read as a regression flashing by on its own. Each
+    // plugin's entry is overwritten in place as its fresh CHECK/result line
+    // streams in (applyUpdateCheckLine), so a still-installed plugin only
+    // ever shows its last known state or a newer one, never a gap.
     root.updateCheckLineBuf = ""
     root.updateCheckProcessed = 0
     root.checkWatchdog.restart()
