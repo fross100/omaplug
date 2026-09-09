@@ -1990,6 +1990,26 @@ Panel {
           }
         }
 
+        // Keep the current operation visible near its controls instead of
+        // making users infer it from a disabled button or the list below.
+        RowLayout {
+          Layout.fillWidth: true
+          visible: root.checkingUpdates || root.updateSummary !== ""
+          spacing: Style.space(6)
+
+          Label {
+            text: root.checkingUpdates
+              ? "Checking plugin updates…"
+              : root.updateSummary
+            textFormat: Text.PlainText
+            color: root.checkingUpdates
+              ? Qt.darker(root.contentForeground, 1.5)
+              : Style.selectedStateColor(root.contentForeground, Color.accent)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+        }
+
         RowLayout {
           Layout.fillWidth: true
           spacing: Style.space(6)
@@ -2101,18 +2121,9 @@ Panel {
 
           spacing: Style.space(8)
           Layout.maximumHeight: implicitHeight
-          visible: root.updateSummary !== "" || root.removeSummary !== ""
+          visible: root.removeSummary !== ""
             || root.moveSummary !== ""
             || (root.removeSelectMode && root.selectedRemoveCount > 0)
-
-          Label {
-            visible: root.updateSummary !== ""
-            text: root.updateSummary
-            textFormat: Text.PlainText
-            color: Style.selectedStateColor(root.contentForeground, Color.accent)
-            font.family: root.contentFontFamily
-            font.pixelSize: Style.font.bodySmall
-          }
 
           Label {
             visible: root.removeSummary !== ""
