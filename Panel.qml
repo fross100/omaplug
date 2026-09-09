@@ -1935,10 +1935,14 @@ Panel {
             tooltipText: root.checkingUpdates ? "Checking for updates…" : "Check updates"
             enabled: !root.checkingUpdates && !root.updateDetachedRunning
             foreground: root.checkingUpdates
-              ? Qt.darker(root.contentForeground, 1.8)
+              ? Color.muted
               : root.contentForeground
             accent: Color.accent
             iconSpinning: root.checkingUpdates
+            // Keep the glyph's visual center stable while it spins and make
+            // the disabled state unmistakable against bright themes.
+            iconSize: Style.font.body
+            opacity: root.checkingUpdates ? 0.65 : 1
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
