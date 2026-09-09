@@ -4,6 +4,8 @@
 
 [![Marketplace](https://img.shields.io/badge/Omarchy_Marketplace-listed-blue)](https://plugins.omarchy.org/plugin.html?id=omaplug) [![Verified](https://img.shields.io/badge/Automated_Security_Baseline-verified-brightgreen)](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/SECURITY.md#automated-security-baseline)
 
+[Share your stats](https://stats.ussego.com/plugins/omaplug) [![hearts](https://stats.ussego.com/api/badges/hearts/omaplug.svg)](https://stats.ussego.com/plugins/omaplug) [![views](https://stats.ussego.com/api/badges/views/omaplug.svg)](https://stats.ussego.com/plugins/omaplug) [![copies](https://stats.ussego.com/api/badges/copies/omaplug.svg)](https://stats.ussego.com/plugins/omaplug)
+
 Access it right from the Omarchy bar — it gives you a centralized place to view and organize the plugins you have installed. Here are a few things you can use it for:
 
 - Easily turn individual plugins on or off as needed.
