@@ -9,6 +9,7 @@ import qs.Commons
 import qs.Ui
 import "panel/Presentation.js" as Presentation
 import "panel/dialogs" as Dialogs
+import "panel/layout" as Arrange
 import "panel/plugin" as Plugin
 import "panel/updates" as Updates
 
@@ -220,6 +221,9 @@ Panel {
   // relaunches the shell so plugins reload from source (fixes stale compiled
   // plugin QML that a live rescan would keep serving).
   property bool restartConfirmOpen: false
+  // Bar-layout board (drag-and-drop ordering across left/center/right).
+  property bool layoutPageOpen: false
+  readonly property var barLayoutSections: root.layoutSections()
   // Right-click context menu on a main-page row.
   property bool rowMenuOpen: false
   property string rowMenuId: ""
@@ -449,6 +453,7 @@ Panel {
   }
 
   function confirmRemove() {
+    root.keepOpenAcrossRebuild()
     root.removeQueue = root.removePending.slice()
     root.removePending = []
     root.removeConfirmOpen = false
@@ -1371,8 +1376,7 @@ Panel {
         sourceKey: row.sourceKey,
         updatable: row.updatable,
         enabled: row.enabled
-      })
-    }
+      })    }
     root.pluginRows = rows
   }
 
@@ -1384,6 +1388,7 @@ Panel {
       var row = root.pluginRows[i]
       if (row.id === id && value === false && row.canDisable === false) return
     }
+    root.keepOpenAcrossRebuild()
     root.pluginToggleProcess.command = ["omarchy", "plugin", value ? "enable" : "disable", id]
     root.pluginToggleProcess.running = true
   }
@@ -1528,6 +1533,54 @@ Panel {
     refreshPlugins()
     fetchMarketplace()
     Qt.callLater(function() { updateStatusFile.reload() })
+    // A toggle/move/remove rewrites shell.json, and the bar rebuilds every
+    // widget on every monitor in response — including this panel's own
+    // Loader, which destroys the open instance. Consume a pending reopen
+    // flag (state file) so the fresh instance reopens itself.
+    keepOpenFlagRead.running = true
+  }
+
+  // Mark the panel to reopen after the bar rebuild that this action is
+  // about to trigger. Call before any registry write from panel UI.
+  // The flag lives in a state file: instance properties cannot survive the
+  // rebuild, and the shell object rejects dynamic properties.
+  function keepOpenAcrossRebuild() {
+    keepOpenFlagWrite.running = true
+  }
+
+  // State-file flag backing keepOpenAcrossRebuild. Two one-shot Processes
+  // (write before the action, consume on fresh load) because plain file IO
+  // from QML JS is intentionally unavailable in Quickshell.
+  Process {
+    id: keepOpenFlagWrite
+    command: ["bash", "-c", "mkdir -p \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy\" && touch \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\""]
+  }
+
+  Process {
+    id: keepOpenFlagRead
+    command: ["bash", "-c", "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"; if [ -f \"$f\" ]; then rm -f \"$f\"; exit 0; else exit 1; fi"]
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        keepOpenRetries = 0
+        Qt.callLater(function() { root.open() })
+      } else if (keepOpenRetries < 4) {
+        // The flag write races the rebuild: the fresh instance can load
+        // before the touch lands. Retry briefly before giving up.
+        keepOpenRetries++
+        keepOpenRetry.restart()
+      }
+    }
+  }
+
+  property int keepOpenRetries: 0
+
+  Timer {
+    id: keepOpenRetry
+    interval: 150
+    repeat: false
+    onTriggered: {
+      if (!keepOpenFlagRead.running) keepOpenFlagRead.running = true
+    }
   }
 
   // ------------------------------------------------------------- open / close
@@ -1543,15 +1596,10 @@ Panel {
     })
   }
 
-  // Reopen marker so the panel stays on top across the bar rebuild that a
-  // move triggers. (Full keep-open machinery arrives in a later commit;
-  // this stub keeps this commit working on its own.)
-  function keepOpenAcrossRebuild() {
-  }
-
   function close() {
     root.installDialogOpen = false
     root.updatesPageOpen = false
+    root.layoutPageOpen = false
     root.removeConfirmOpen = false
     root.restartConfirmOpen = false
     root.removeSelectMode = false
@@ -1756,7 +1804,19 @@ Panel {
           }
 
           Button {
-            iconText: "\uf0ed"
+            iconText: "\uf0c9"
+            tooltipText: "Arrange bar layout"
+            foreground: root.contentForeground
+            accent: Color.accent
+            fontFamily: root.contentFontFamily
+            fontSize: Style.font.bodySmall
+            horizontalPadding: Style.space(10)
+            verticalPadding: Style.space(5)
+            onClicked: root.layoutPageOpen = true
+          }
+
+          Button {
+            iconText: ""
             tooltipText: "Install plugin"
             foreground: root.contentForeground
             accent: Color.accent
@@ -1973,6 +2033,23 @@ Panel {
       onOpenUrlRequested: function(url) { root.openExternal(url) }
       onUpdatePluginRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onUpdateAllRequested: root.updateAll()
+    }
+
+    Arrange.Page {
+      id: layoutPage
+      anchors.fill: parent
+      z: 5000
+
+      open: root.layoutPageOpen
+      sections: root.barLayoutSections
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
+
+      onCloseRequested: root.layoutPageOpen = false
+      onDropRequested: function(pluginId, section, index) {
+        root.moveWidgetToPosition(pluginId, section, index)
+      }
     }
 
 
