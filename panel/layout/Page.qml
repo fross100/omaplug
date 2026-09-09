@@ -266,9 +266,12 @@ Rectangle {
                   }
 
                   MouseArea {
+                    id: chipMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                    // Arrow at rest so chips read as a plain list; the hand
+                    // only appears while a drag is actually in flight.
+                    cursorShape: chipMouse.dragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
                     acceptedButtons: Qt.LeftButton
 
                     property real pressX: 0
