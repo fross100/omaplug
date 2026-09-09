@@ -176,7 +176,7 @@ Panel {
   // Mirrored verbatim in tests/AutoCheckLogic.qml; keep both copies
   // identical, or auto-check-test.sh's sync guard will fail the build.
   // AUTOCHECK-SETTINGS-BEGIN
-  readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", true) === true
+  readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", false) === true
   // real, not int: an int property truncates any fractional hours value
   // (e.g. 0.5) towards zero, which would silently turn into a zero-interval
   // Timer below and spin checkUpdates() in a tight loop.
@@ -1932,10 +1932,13 @@ Panel {
 
           Button {
             iconText: "\uf021"
-            tooltipText: "Check updates"
+            tooltipText: root.checkingUpdates ? "Checking for updates…" : "Check updates"
             enabled: !root.checkingUpdates && !root.updateDetachedRunning
-            foreground: root.contentForeground
+            foreground: root.checkingUpdates
+              ? Qt.darker(root.contentForeground, 1.8)
+              : root.contentForeground
             accent: Color.accent
+            iconSpinning: root.checkingUpdates
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)

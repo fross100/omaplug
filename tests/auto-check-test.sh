@@ -114,11 +114,11 @@ grep -Fq 'onTriggered: root.checkUpdates(root.autoCheckCoordinatorPath)' "$ROOT/
   exit 1
 }
 
-# Defaults: enabled, 6h interval, fires on start.
+# Defaults: disabled, 6h interval, stays quiet until enabled.
 OUT=$(run '{}')
-assert_contains 'RESOLVED_ENABLED true' "$OUT" default-enabled
+assert_contains 'RESOLVED_ENABLED false' "$OUT" default-disabled
 assert_contains 'RESOLVED_HOURS 6' "$OUT" default-hours
-assert_contains 'TIMER_FIRED' "$OUT" default-fires
+assert_not_contains 'TIMER_FIRED' "$OUT" default-does-not-fire
 
 # Explicitly disabled: never fires, even once, within the test window.
 OUT=$(run '{"autoCheckUpdates":false}')

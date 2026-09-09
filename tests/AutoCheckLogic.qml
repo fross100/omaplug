@@ -25,7 +25,7 @@ ShellRoot {
   // Kept byte-identical to Panel.qml by auto-check-test.sh's sync guard;
   // edit both or the build fails.
   // AUTOCHECK-SETTINGS-BEGIN
-  readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", true) === true
+  readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", false) === true
   // real, not int: an int property truncates any fractional hours value
   // (e.g. 0.5) towards zero, which would silently turn into a zero-interval
   // Timer below and spin checkUpdates() in a tight loop.
