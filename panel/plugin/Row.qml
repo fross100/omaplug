@@ -124,7 +124,12 @@ Item {
       }
 
       ColumnLayout {
+        // preferredWidth 0 + fillWidth: take leftover row space instead of the
+        // description's single-line implicitWidth (otherwise Wrap/Elide never
+        // bind and card.clip cuts mid-word with no ellipsis).
         Layout.fillWidth: true
+        Layout.preferredWidth: 0
+        Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignVCenter
         spacing: Style.space(2)
 
@@ -133,6 +138,7 @@ Item {
           spacing: Style.space(8)
 
           Label {
+            id: nameLabel
             text: pluginRow.modelData.name
             textFormat: Text.PlainText
             color: pluginRow.foreground
@@ -142,8 +148,19 @@ Item {
             // Keep the badge and version adjacent to the name while still
             // letting long names shrink and elide instead of displacing the
             // action column (#4).
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
             Layout.minimumWidth: 0
             elide: Label.ElideRight
+
+            // Full name only when elided · matches author/ListingLinks ToolTip style.
+            ToolTip.text: truncated ? text : ""
+            ToolTip.visible: nameHover.hovered && truncated
+            ToolTip.delay: 400
+
+            HoverHandler {
+              id: nameHover
+            }
           }
 
           Rectangle {
@@ -206,16 +223,26 @@ Item {
         }
 
         Label {
+          id: descriptionLabel
           text: pluginRow.modelData.description !== "" ? pluginRow.modelData.description : "No description"
           textFormat: Text.PlainText
           color: Qt.darker(pluginRow.foreground, 1.6)
           font.family: pluginRow.fontFamily
           font.pixelSize: Style.font.bodySmall
           Layout.fillWidth: true
+          Layout.preferredWidth: 0
           Layout.minimumWidth: 0
           wrapMode: Label.Wrap
           maximumLineCount: 2
           elide: Label.ElideRight
+
+          ToolTip.text: truncated ? text : ""
+          ToolTip.visible: descriptionHover.hovered && truncated
+          ToolTip.delay: 400
+
+          HoverHandler {
+            id: descriptionHover
+          }
         }
 
         RowLayout {
