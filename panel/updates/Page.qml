@@ -86,6 +86,17 @@ Rectangle {
     return Qt.darker(foreground, 1.6)
   }
 
+  // Swallows clicks that land in a gap between controls (margins, spacing,
+  // below a short list) so they don't fall through to whatever is rendered
+  // behind this page - the main plugin list is still visible/enabled there.
+  // Declared before the Loader so its buttons/rows still take priority for
+  // clicks that actually land on them; same pattern as the dialogs'
+  // full-page MouseArea (panel/dialogs/Confirm.qml, Install.qml).
+  MouseArea {
+    anchors.fill: parent
+    onClicked: {}
+  }
+
   Loader {
     anchors.fill: parent
     active: page.open || page._stayLoaded

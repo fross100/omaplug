@@ -1570,6 +1570,13 @@ Panel {
       anchors.fill: parent
       clip: true
       anchors.topMargin: appHeader.height
+      // The updates page (z: 5000, below) is a full overlay, not a child of
+      // this Item, so painting/input here would otherwise carry on
+      // underneath it - visible through any transparency in panelBackground,
+      // and still clickable through any gap the overlay's own MouseArea
+      // misses. Hiding this Item outright while that page is open removes
+      // both problems at the source instead of only blocking clicks.
+      visible: !root.updatesPageOpen
 
       MouseArea {
         anchors.fill: parent
