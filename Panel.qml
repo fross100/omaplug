@@ -34,6 +34,13 @@ Panel {
   // ------------------------------------------------------------------ plugins
 
   property var pluginRows: []
+  property var nestedWidgetIds: ({})
+  property Process pluginConfigProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyPluginConfig(pluginConfigStdout.text)
+    }
+    stdout: StdioCollector { id: pluginConfigStdout; waitForEnd: true }
+  }
   property Process pluginListProcess: Process {
     onExited: function(exitCode) {
       if (exitCode === 0) root.applyPluginList(pluginListStdout.text)
@@ -1271,6 +1278,25 @@ Panel {
     if (root.pluginListProcess.running) return
     root.pluginListProcess.command = ["omarchy", "plugin", "list", "--json"]
     root.pluginListProcess.running = true
+    if (!root.pluginConfigProcess.running) {
+      root.pluginConfigProcess.command = ["omarchy-shell", "shell", "listShellConfig"]
+      root.pluginConfigProcess.running = true
+    }
+  }
+
+  function applyPluginConfig(text) {
+    var config = {}
+    try { config = JSON.parse(String(text || "{}")) } catch (e) { return }
+    var nested = {}
+    var layout = config.bar && config.bar.layout ? config.bar.layout : {}
+    for (var section in layout) {
+      var entries = Array.isArray(layout[section]) ? layout[section] : []
+      for (var i = 0; i < entries.length; i++) {
+        var widgets = entries[i] && Array.isArray(entries[i].widgets) ? entries[i].widgets : []
+        for (var j = 0; j < widgets.length; j++) nested[String(widgets[j])] = true
+      }
+    }
+    root.nestedWidgetIds = nested
   }
 
   function applyPluginList(text) {
@@ -1397,7 +1423,8 @@ Panel {
 
   function pluginEnabled(id) {
     for (var i = 0; i < root.pluginRows.length; i++)
-      if (root.pluginRows[i].id === id) return root.pluginRows[i].enabled === true
+      if (root.pluginRows[i].id === id)
+        return root.pluginRows[i].enabled === true || root.nestedWidgetIds[String(id)] === true
     return false
   }
 
