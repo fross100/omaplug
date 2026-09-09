@@ -170,58 +170,6 @@ Panel {
     return kinds.indexOf(root.filterKind) !== -1
   }
 
-  // Background auto-check: whether to poll for updates without the panel
-  // being opened, and how often. Persisted in this widget's shell.json entry
-  // so the choice survives shell restarts and is per-user, not per-checkout.
-  // Mirrored verbatim in tests/AutoCheckLogic.qml; keep both copies
-  // identical, or auto-check-test.sh's sync guard will fail the build.
-  // AUTOCHECK-SETTINGS-BEGIN
-  readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", true) === true
-  // real, not int: an int property truncates any fractional hours value
-  // (e.g. 0.5) towards zero, which would silently turn into a zero-interval
-  // Timer below and spin checkUpdates() in a tight loop.
-  readonly property real autoCheckIntervalHours: {
-    var hours = Number(root.setting("autoCheckIntervalHours", 6))
-    return (isFinite(hours) && hours > 0) ? hours : 6
-  }
-  // AUTOCHECK-SETTINGS-END
-
-  function persistAutoCheckSetting(values) {
-    if (autoCheckSettingsProcess.running) return
-    var key = Object.keys(values)[0]
-    autoCheckSettingsProcess.command = ["omarchy", "bar", "set", root.moduleName,
-      key, JSON.stringify(values[key]), "--json"]
-    autoCheckSettingsProcess.pendingValues = values
-    autoCheckSettingsProcess.running = true
-  }
-
-  property Process autoCheckSettingsProcess: Process {
-    property var pendingValues: ({})
-    onExited: function(exitCode) {
-      if (exitCode === 0) root.applyAutoCheckSettings(pendingValues)
-      else root.updateSummary = "Could not save automatic update settings."
-    }
-  }
-
-  function applyAutoCheckSettings(values) {
-    var entry = { id: root.moduleName }
-    for (var existing in root.settings) if (existing !== "id") entry[existing] = root.settings[existing]
-    for (var key in values) entry[key] = values[key]
-
-    root.settings = entry
-    if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
-  }
-
-  function setAutoCheckEnabled(value) {
-    root.persistAutoCheckSetting({ autoCheckUpdates: value === true })
-  }
-
-  function setAutoCheckIntervalHours(hours) {
-    var value = Number(hours)
-    if (!isFinite(value) || value <= 0) return
-    root.persistAutoCheckSetting({ autoCheckIntervalHours: value })
-  }
-
   // Update checking state, keyed by the plugin folder name (sourceKey).
   property var updateStates: ({})
   property bool checkingUpdates: false
@@ -233,10 +181,6 @@ Panel {
   // panel reconnects to the same job via this runtime status file.
   property string updateHelperPath: ""
   property string updateRunnerPath: ""
-  // Wraps plugin-state.sh with a lock+cache so the omaplug instance on each
-  // monitor's bar doesn't independently re-fetch every plugin's remote when
-  // the background timer (not a user click) is what triggered the check.
-  property string autoCheckCoordinatorPath: ""
   readonly property string updateStateRoot: {
     var runtime = Quickshell.env("XDG_RUNTIME_DIR")
     return runtime && runtime !== ""
@@ -469,9 +413,6 @@ Panel {
     return count > 0 ? " (" + count + " error" + (count === 1 ? "" : "s") + ")" : ""
   }
 
-  // Mirrored verbatim in tests/AutoCheckLogic.qml; keep both copies
-  // identical, or auto-check-test.sh's sync guard will fail the build.
-  // PENDING-UPDATE-COUNT-BEGIN
   readonly property int pendingUpdateCount: {
     var n = 0
     for (var k in root.updateStates) {
@@ -480,7 +421,6 @@ Panel {
     }
     n
   }
-  // PENDING-UPDATE-COUNT-END
 
   readonly property int enabledPluginCount: {
     var n = 0
@@ -651,48 +591,17 @@ Panel {
   // Fetches every git-managed plugin's remote and reports which are behind.
   // The script echoes a CHECK line before each plugin so the updates page can
   // show per-plugin progress while the fetch runs, then the result line.
-  //
-  // helperPath defaults to plugin-state.sh (the manual "Check for updates"
-  // button always uses this, unparameterized). The background Timer below
-  // instead passes autoCheckCoordinatorPath: the omaplug bar widget exists
-  // once per monitor, each running its own independent Panel.qml/Timer, so
-  // an unattended tick would otherwise fire N simultaneous, fully redundant
-  // fetch passes over every installed plugin. The coordinator wraps
-  // plugin-state.sh with a lock + shared cache so only one instance's timer
-  // tick actually runs it; the others reuse that output.
-  function checkUpdates(helperPath) {
-    var dir = (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/plugins"
-    var helper = helperPath || root.updateHelperPath
-    if (!dir || helper === "" || root.checkingUpdates || root.updateDetachedRunning) return
+  function checkUpdates() {
+    var dir = Quickshell.env("HOME") + "/.config/omarchy/plugins"
+    if (!dir || root.updateHelperPath === "" || root.checkingUpdates || root.updateDetachedRunning) return
     root.checkingUpdates = true
     root.updateSummary = ""
-    // Deliberately not reset: this now also runs unattended in the
-    // background (autoUpdateCheckTimer below), and blanking every row/the
-    // bar badge back to "Pending" for the duration of a check the user never
-    // asked for would read as a regression flashing by on its own. Each
-    // plugin's entry is overwritten in place as its fresh CHECK/result line
-    // streams in (applyUpdateCheckLine), so a still-installed plugin only
-    // ever shows its last known state or a newer one, never a gap.
+    root.updateStates = ({})
     root.updateCheckLineBuf = ""
     root.updateCheckProcessed = 0
     root.checkWatchdog.restart()
-    updateCheckProcess.command = [helper, dir]
+    updateCheckProcess.command = [root.updateHelperPath, dir]
     updateCheckProcess.running = true
-  }
-
-  // Runs checkUpdates() on its own, whether or not the panel is open (the
-  // BarWidget's Loader keeps this item alive in the background). checkUpdates
-  // already no-ops while a check or an update is in flight, so this can't
-  // step on a user-initiated check. Toggling autoCheckEnabled pauses/resumes
-  // the timer immediately; changing autoCheckIntervalHours re-times it on the
-  // next tick without needing a restart.
-  Timer {
-    id: autoUpdateCheckTimer
-    interval: root.autoCheckIntervalHours * 3600000
-    running: root.autoCheckEnabled && root.autoCheckCoordinatorPath !== "" && root.hostWidget !== null
-    repeat: true
-    triggeredOnStart: true
-    onTriggered: root.checkUpdates(root.autoCheckCoordinatorPath)
   }
 
   // Per-line parser for plugin-state.sh output: tab-separated
@@ -1657,7 +1566,6 @@ Panel {
     root.marketplaceHelperPath = String(Qt.resolvedUrl("marketplace-catalog.sh")).replace(/^file:\/\//, "")
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
-    root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
     fetchMarketplace()
     Qt.callLater(function() { updateStatusFile.reload() })
@@ -2170,16 +2078,12 @@ Panel {
       summary: root.updateSummary
       iconFor: root.iconFor
       whatsNewUrlFor: root.whatsNewUrlFor
-      autoCheckEnabled: root.autoCheckEnabled
-      autoCheckIntervalHours: root.autoCheckIntervalHours
 
       onCloseRequested: root.updatesPageOpen = false
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onOpenUrlRequested: function(url) { root.openExternal(url) }
       onUpdatePluginRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onUpdateAllRequested: root.updateAll()
-      onAutoCheckEnabledRequested: function(value) { root.setAutoCheckEnabled(value) }
-      onAutoCheckIntervalRequested: function(hours) { root.setAutoCheckIntervalHours(hours) }
     }
 
     Arrange.Page {

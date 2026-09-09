@@ -1,6 +1,5 @@
 import QtQuick
 import Quickshell.Io
-import qs.Commons
 import qs.Ui
 
 BarWidget {
@@ -11,7 +10,6 @@ BarWidget {
     // bar-widget root, and the popout coordinator compares against
     // slot.activeItem — so the widget, not the nested panel, is the identity.
     readonly property bool opened: panelItem ? panelItem.opened === true : false
-    readonly property int pendingUpdateCount: panelItem ? (panelItem.pendingUpdateCount || 0) : 0
 
     function open() { if (panelItem) panelItem.open() }
     function close() { if (panelItem) panelItem.close() }
@@ -72,35 +70,6 @@ BarWidget {
 
         onPressed: function(b) {
             if (b === Qt.LeftButton) root.togglePanel()
-        }
-    }
-
-    // Small pending-update indicator, independent of the manager's own
-    // open/close state so it stays visible whether or not the panel is open.
-    Rectangle {
-        id: updateBadge
-        visible: root.pendingUpdateCount > 0
-        anchors.top: button.top
-        anchors.right: button.right
-        z: 10
-
-        readonly property string countText: root.pendingUpdateCount > 9 ? "9+" : String(root.pendingUpdateCount)
-
-        implicitWidth: Math.max(Style.space(14), badgeLabel.implicitWidth + Style.space(6))
-        implicitHeight: Style.space(14)
-        radius: height / 2
-        color: Color.accent
-        border.width: 1
-        border.color: root.bar ? root.bar.background : "transparent"
-
-        Text {
-            id: badgeLabel
-            anchors.centerIn: parent
-            text: updateBadge.countText
-            color: "white"
-            font.family: root.bar ? root.bar.fontFamily : Style.font.family
-            font.pixelSize: Style.font.caption * 0.85
-            font.bold: true
         }
     }
 }

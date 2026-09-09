@@ -95,21 +95,6 @@ try {
   assert.equal(context.keepOpenFlagWrite.command.at(-1), 'main');
   assert.match(source, /^    keepOpenFlagRead\.running = true$/m);
   console.log('panel-reopen-test: ok');
-  const settingsStart = source.indexOf('  function persistAutoCheckSetting(');
-  vm.runInContext(source.slice(settingsStart, source.indexOf('\n  }', settingsStart) + 4), context);
-  context.autoCheckSettingsProcess = { running: false };
-  context.moduleName = 'omaplug';
-  context.persistAutoCheckSetting({ autoCheckUpdates: false });
-  assert.deepEqual(Array.from(context.autoCheckSettingsProcess.command),
-    ['omarchy', 'bar', 'set', 'omaplug', 'autoCheckUpdates', 'false', '--json']);
-  assert.equal(context.autoCheckSettingsProcess.running, true);
-  context.persistAutoCheckSetting({ autoCheckIntervalHours: 3 });
-  assert.equal(context.autoCheckSettingsProcess.command[4], 'autoCheckUpdates');
-  context.autoCheckSettingsProcess.running = false;
-  context.persistAutoCheckSetting({ autoCheckIntervalHours: 3 });
-  assert.deepEqual(Array.from(context.autoCheckSettingsProcess.command),
-    ['omarchy', 'bar', 'set', 'omaplug', 'autoCheckIntervalHours', '3', '--json']);
-  console.log('auto-check-settings-cli-test: ok');
 } finally {
   fs.rmSync(temporary, { recursive: true, force: true });
 }

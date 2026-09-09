@@ -30,17 +30,11 @@ Rectangle {
   required property var iconFor
   required property var whatsNewUrlFor
 
-  required property bool autoCheckEnabled
-  required property real autoCheckIntervalHours
-  readonly property var autoCheckIntervalChoices: [1, 3, 6, 12, 24]
-
   signal closeRequested
   signal tabRequested(int direction)
   signal openUrlRequested(string url)
   signal updatePluginRequested(string sourceKey)
   signal updateAllRequested
-  signal autoCheckEnabledRequested(bool value)
-  signal autoCheckIntervalRequested(int hours)
 
   visible: open
   color: panelBackground
@@ -143,48 +137,6 @@ Rectangle {
               horizontalPadding: Style.space(10)
               verticalPadding: Style.space(5)
               onClicked: page.closeRequested()
-            }
-          }
-
-          Toggle {
-            Layout.fillWidth: true
-            label: "Auto-check for updates"
-            description: page.autoCheckEnabled
-              ? "Checks in the background on shell start and every " + page.autoCheckIntervalHours + "h"
-              : "Only checks when you open this page or click Update"
-            checked: page.autoCheckEnabled
-            foreground: page.foreground
-            accent: Color.accent
-            fontFamily: page.fontFamily
-            onClicked: page.autoCheckEnabledRequested(!page.autoCheckEnabled)
-          }
-
-          RowLayout {
-            Layout.fillWidth: true
-            visible: page.autoCheckEnabled
-            spacing: Style.space(6)
-
-            Label {
-              text: "Check every"
-              color: Qt.darker(page.foreground, 1.5)
-              font.family: page.fontFamily
-              font.pixelSize: Style.font.bodySmall
-            }
-
-            ButtonGroup {
-              options: page.autoCheckIntervalChoices.map(function(h) {
-                return { value: String(h), label: h + "h" }
-              })
-              value: String(page.autoCheckIntervalHours)
-              foreground: page.foreground
-              accent: Color.accent
-              fontFamily: page.fontFamily
-              fontSize: Style.font.caption
-              onChanged: function(v) { page.autoCheckIntervalRequested(Number(v)) }
-            }
-
-            Item {
-              Layout.fillWidth: true
             }
           }
 
