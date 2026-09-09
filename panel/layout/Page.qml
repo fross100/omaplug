@@ -269,6 +269,9 @@ Rectangle {
                     id: chipMouse
                     anchors.fill: parent
                     hoverEnabled: true
+                    // The enclosing ListView steals press-and-move for
+                    // scrolling otherwise; keep the grab for dragging.
+                    preventStealing: true
                     // Arrow at rest so chips read as a plain list; the hand
                     // only appears while a drag is actually in flight.
                     cursorShape: chipMouse.dragging ? Qt.ClosedHandCursor : Qt.ArrowCursor
