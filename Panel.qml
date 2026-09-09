@@ -1572,7 +1572,8 @@ Panel {
     // A toggle/move/remove rewrites shell.json, and the bar rebuilds every
     // widget on every monitor in response — including this panel's own
     // Loader, which destroys the open instance. Consume a pending reopen
-    // flag (state file) so the fresh instance reopens itself.    keepOpenFlagRead.running = true
+    // flag (state file) so the fresh instance reopens itself.
+    keepOpenFlagRead.running = true
   }
 
   // Mark the panel to reopen after the bar rebuild that this action is
@@ -1580,6 +1581,9 @@ Panel {
   // The flag lives in a state file: instance properties cannot survive the
   // rebuild, and the shell object rejects dynamic properties.
   function keepOpenAcrossRebuild() {
+    keepOpenFlagWrite.command = ["bash", "-c",
+      "mkdir -p \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy\" && printf '%s' \"$1\" > \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"",
+      "omaplug", root.layoutPageOpen ? "layout" : "main"]
     keepOpenFlagWrite.running = true
   }
 
@@ -1588,16 +1592,20 @@ Panel {
   // from QML JS is intentionally unavailable in Quickshell.
   Process {
     id: keepOpenFlagWrite
-    command: ["bash", "-c", "mkdir -p \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy\" && touch \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\""]
   }
 
   Process {
     id: keepOpenFlagRead
-    command: ["bash", "-c", "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"; if [ -f \"$f\" ]; then rm -f \"$f\"; exit 0; else exit 1; fi"]
+    command: ["bash", "-c", "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"; if [ -f \"$f\" ]; then cat \"$f\"; rm -f \"$f\"; exit 0; else exit 1; fi"]
+    stdout: StdioCollector { id: keepOpenState; waitForEnd: true }
     onExited: function(exitCode) {
       if (exitCode === 0) {
         keepOpenRetries = 0
-        Qt.callLater(function() { root.open() })
+        var restoreLayout = String(keepOpenState.text).trim() === "layout"
+        Qt.callLater(function() {
+          root.open()
+          root.layoutPageOpen = restoreLayout
+        })
       } else if (keepOpenRetries < 4) {
         // The flag write races the rebuild: the fresh instance can load
         // before the touch lands. Retry briefly before giving up.
@@ -1847,7 +1855,7 @@ Panel {
           }
 
           Button {
-            iconText: "\uf0c9"
+            iconText: "\uebf6"
             tooltipText: "Arrange bar layout"
             foreground: root.contentForeground
             accent: Color.accent
@@ -2081,6 +2089,7 @@ Panel {
     Arrange.Page {
       id: layoutPage
       anchors.fill: parent
+      anchors.topMargin: appHeader.height
       z: 5000
 
       open: root.layoutPageOpen
