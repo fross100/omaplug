@@ -14,9 +14,8 @@ import "panel/updates" as Updates
 
 // Plugin manager popup: lists every discovered plugin (first-party omarchy +
 // third-party) with an enable/disable switch. The list is read from the
-// shell's PluginRegistry, which already scans manifests, so there is no
-// duplicate file IO — toggling routes through registry.setEnabled, the same
-// path `omarchy plugin enable/disable` uses.
+// `omarchy plugin list --json`, the same public source used by Omarchy's
+// plugin command. Actions go back through the matching CLI commands.
 Panel {
   id: root
   moduleName: "omaplug"
@@ -35,14 +34,31 @@ Panel {
   // ------------------------------------------------------------------ plugins
 
   property var pluginRows: []
-  property var rememberedBarStates: ({})
-
-  // The shell injects the PluginRegistry into the bar's `shell` (the built-in
-  // Bar.qml exposes no `pluginRegistry` property itself), so resolve it there
-  // with a fallback for custom bars that do carry the registry directly.
-  readonly property var registry: root.bar && root.bar.shell
-    ? root.bar.shell.pluginRegistry
-    : (root.bar ? root.bar.pluginRegistry : null)
+  property Process pluginListProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyPluginList(pluginListStdout.text)
+      else root.pluginRows = []
+    }
+    stdout: StdioCollector {
+      id: pluginListStdout
+      waitForEnd: true
+    }
+  }
+  property Process pluginToggleProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode !== 0) console.warn("Could not change plugin state")
+      root.refreshPlugins()
+    }
+  }
+  property Process pluginManifestProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyPluginMetadata(pluginManifestStdout.text)
+    }
+    stdout: StdioCollector {
+      id: pluginManifestStdout
+      waitForEnd: true
+    }
+  }
 
   // Git remote URLs for updatable plugins, keyed by sourceKey. Filled by a
   // background `git remote get-url` scan so each row can offer a repo link.
@@ -63,13 +79,7 @@ Panel {
   property var pluginCommits: ({})
 
   function marketplaceEntry(id) {
-    if (modelData_firstParty(id)) return null
     return root.marketplaceMap[String(id)] || null
-  }
-  function modelData_firstParty(id) {
-    var reg = root.registry
-    var m = reg && reg.installedPlugins ? reg.installedPlugins[id] : null
-    return m ? m.__isFirstParty === true : false
   }
   // GitHub compare URL from the listing's snapshot-checked commit to the
   // locally installed commit. Only http(s) GitHub remotes are eligible, since
@@ -499,9 +509,8 @@ Panel {
   // folder name) so each row can offer a repo link and compare its installed
   // code against the marketplace listing snapshot.
   function scanPluginRepos() {
-    var reg = root.registry
-    var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
-    if (!dir || root.reposScanning) return
+    var dir = Quickshell.env("HOME") + "/.config/omarchy/plugins"
+    if (root.reposScanning) return
     root.reposScanning = true
     var script = ""
       + "dirs=\"$0\"\n"
@@ -563,8 +572,7 @@ Panel {
   // The script echoes a CHECK line before each plugin so the updates page can
   // show per-plugin progress while the fetch runs, then the result line.
   function checkUpdates() {
-    var reg = root.registry
-    var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
+    var dir = Quickshell.env("HOME") + "/.config/omarchy/plugins"
     if (!dir || root.updateHelperPath === "" || root.checkingUpdates || root.updateDetachedRunning) return
     root.checkingUpdates = true
     root.updateSummary = ""
@@ -834,9 +842,13 @@ Panel {
         var entry = plugins[i]
         if (!entry || typeof entry.id !== "string" || !entry.id) continue
         map[entry.id] = {
+          name: typeof entry.name === "string" ? entry.name : "",
+          version: entry.version !== undefined ? String(entry.version) : "",
+          author: typeof entry.author === "string" ? entry.author : "",
+          description: typeof entry.description === "string" ? entry.description : "",
           verified: entry.verificationStatus === "verified",
           snapshotCommit: typeof entry.verificationCommit === "string" ? entry.verificationCommit : "",
-          snapshotStatus: String(entry.verificationSnapshotStatus || entry.verificationCoverage || ""),
+          snapshotStatus: String(entry.verificationCoverage || entry.verificationSnapshotStatus || entry.verificationStatus || ""),
           upstreamCommit: typeof entry.upstreamObservedCommit === "string" ? entry.upstreamObservedCommit : "",
           releaseUrl: entry.repositoryRelease && typeof entry.repositoryRelease.url === "string" ? entry.repositoryRelease.url : ""
         }
@@ -846,7 +858,31 @@ Panel {
       return
     }
     root.marketplaceMap = map
+    root.mergeMarketplaceMetadata(map)
     console.log("marketplace entries:", Object.keys(map).length)
+  }
+
+  function mergeMarketplaceMetadata(map) {
+    var rows = []
+    for (var i = 0; i < root.pluginRows.length; i++) {
+      var row = root.pluginRows[i]
+      var item = map[String(row.id)] || {}
+      rows.push({
+        id: row.id,
+        name: row.name || item.name || row.id,
+        version: row.version !== "unknown" ? row.version : (item.version || "unknown"),
+        author: row.author || item.author || "",
+        description: row.description || item.description || "",
+        kinds: row.kinds,
+        canDisable: row.canDisable,
+        firstParty: row.firstParty,
+        sourceDir: row.sourceDir,
+        sourceKey: row.sourceKey,
+        updatable: row.updatable,
+        enabled: row.enabled
+      })
+    }
+    root.pluginRows = rows
   }
 
   property Process marketplaceProcess: Process {
@@ -1224,32 +1260,43 @@ Panel {
   }
 
   function refreshPlugins() {
-    var reg = root.registry
-    if (!reg || !reg.installedPlugins) {
+    if (root.pluginListProcess.running) return
+    root.pluginListProcess.command = ["omarchy", "plugin", "list", "--json"]
+    root.pluginListProcess.running = true
+  }
+
+  function applyPluginList(text) {
+    var catalog
+    try { catalog = JSON.parse(String(text || "")) }
+    catch (e) {
+      console.warn("Could not parse omarchy plugin list:", e)
+      pluginRows = []
+      return
+    }
+    if (!Array.isArray(catalog)) {
       pluginRows = []
       return
     }
     var rows = []
-    var pdir = (reg.pluginsDir || "").replace(/\/+$/, "") + "/"
-    for (var id in reg.installedPlugins) {
-      var m = reg.installedPlugins[id]
-      if (!m || typeof m !== "object") continue
-      var sourceDir = String(m.__sourceDir || "")
+    for (var i = 0; i < catalog.length; i++) {
+      var m = catalog[i]
+      if (!m || typeof m !== "object" || !m.id) continue
+      var id = String(m.id)
       var kinds = Array.isArray(m.kinds) ? m.kinds : []
       var isBarOption = kinds.indexOf("bar") !== -1
-      var isBarWidget = kinds.indexOf("bar-widget") !== -1
       rows.push({
         id: id,
         name: m.name || id,
-        version: m.version || "unknown",
-        author: m.author || "",
-        description: m.description || "",
+        version: "unknown",
+        author: "",
+        description: "",
         kinds: kinds.join(", "),
         canDisable: !isBarOption,
-        firstParty: m.__isFirstParty === true,
-        sourceDir: sourceDir,
-        sourceKey: sourceDir.replace(/\/+$/, "").split("/").pop() || "",
-        updatable: sourceDir.indexOf(pdir) === 0
+        firstParty: m.firstParty === true,
+        sourceDir: "",
+        sourceKey: id,
+        updatable: m.firstParty !== true,
+        enabled: m.enabled === true
       })
     }
     rows.sort(function(a, b) {
@@ -1259,109 +1306,91 @@ Panel {
       return String(a.name).localeCompare(String(b.name))
     })
     pluginRows = rows
+    root.mergeMarketplaceMetadata(root.marketplaceMap)
+    root.pluginManifestProcess.command = ["bash", "-c",
+      "for base in \"$0/shell/plugins\" \"$HOME/.config/omarchy/plugins\"; do "
+      + "[ -d \"$base\" ] || continue; "
+      + "firstParty=false; [[ \"$base\" == \"$0/shell/plugins\" ]] && firstParty=true; "
+      + "find \"$base\" -type f '(' -name manifest.json -o -name '*.manifest.json' ')' -print0 "
+      + "| while IFS= read -r -d '' file; do jq -c --argjson firstParty \"$firstParty\" "
+      + "'{id,name,version,author,description,kinds,firstParty:$firstParty}' \"$file\"; done; "
+      + "done",
+      Quickshell.env("OMARCHY_PATH")]
+    root.pluginManifestProcess.running = true
     root.scanPluginRepos()
   }
 
-  function barStateFor(id) {
-    var reg = root.registry
-    var config = reg && typeof reg.shellConfigProvider === "function"
-      ? reg.shellConfigProvider()
-      : null
-    var layout = config && config.bar ? config.bar.layout : null
-    if (!layout) return null
-    var sections = ["left", "center", "right"]
-    for (var s = 0; s < sections.length; s++) {
-      var entries = layout[sections[s]]
-      if (!Array.isArray(entries)) continue
-      for (var i = 0; i < entries.length; i++) {
-        var entry = entries[i]
-        var entryId = reg && typeof reg.barEntryId === "function"
-          ? reg.barEntryId(entry)
-          : (entry && typeof entry === "object" ? entry.id : entry)
-        if (String(entryId || "") === String(id))
-          return {
-            section: sections[s],
-            index: i,
-            entry: entry && typeof entry === "object"
-              ? JSON.parse(JSON.stringify(entry))
-              : { id: String(entryId) }
-          }
+  function applyPluginMetadata(text) {
+    var metadata = {}
+    var lines = String(text || "").trim().split("\n")
+    for (var i = 0; i < lines.length; i++) {
+      try {
+        var item = JSON.parse(lines[i])
+        if (item && item.id) metadata[String(item.id)] = item
+      } catch (e) { }
+    }
+    var rows = []
+    if (root.pluginRows.length === 0) {
+      for (var id in metadata) {
+        var fallback = metadata[id]
+        var fallbackKinds = Array.isArray(fallback.kinds) ? fallback.kinds : []
+        rows.push({
+          id: id,
+          name: fallback.name || id,
+          version: fallback.version || "unknown",
+          author: fallback.author || "",
+          description: fallback.description || "",
+          kinds: fallbackKinds.join(", "),
+          canDisable: fallbackKinds.indexOf("bar") === -1,
+          firstParty: fallback.firstParty === true,
+          sourceDir: "",
+          sourceKey: id,
+          updatable: fallback.firstParty !== true,
+          enabled: false
+        })
       }
     }
-    return null
-  }
-
-  function rememberBarState(id, state) {
-    var next = {}
-    for (var key in root.rememberedBarStates)
-      next[key] = root.rememberedBarStates[key]
-    if (state) next[String(id)] = state
-    else delete next[String(id)]
-    root.rememberedBarStates = next
-  }
-
-  function restoreBarSettings(id, state) {
-    var reg = root.registry
-    var entry = state ? state.entry : null
-    if (!entry || !reg || typeof reg.setBarWidget !== "function") return
-    var location = root.barStateFor(id)
-    if (!location) return
-    var selector = { section: location.section, index: location.index }
-    for (var key in entry) {
-      if (key === "id") continue
-      var error = reg.setBarWidget(id, key, entry[key], selector)
-      if (error) console.warn("Could not restore " + id + " setting " + key + ": " + error)
+    for (var j = 0; j < root.pluginRows.length; j++) {
+      var row = root.pluginRows[j]
+      var item = metadata[row.id]
+      if (!item) {
+        rows.push(row)
+        continue
+      }
+      rows.push({
+        id: row.id,
+        name: item.name || row.name,
+        version: item.version || row.version,
+        author: item.author || row.author,
+        description: item.description || row.description,
+        kinds: Array.isArray(item.kinds) ? item.kinds.join(", ") : row.kinds,
+        canDisable: row.canDisable,
+        firstParty: row.firstParty,
+        sourceDir: row.sourceDir,
+        sourceKey: row.sourceKey,
+        updatable: row.updatable,
+        enabled: row.enabled
+      })
     }
+    root.pluginRows = rows
   }
 
   function setPluginEnabled(id, value) {
-    var reg = root.registry
-    if (!reg || typeof reg.setEnabled !== "function") return
+    if (root.pluginToggleProcess.running) return
     // Bar options cannot be disabled directly (they are bar placements);
     // guard here so a stale UI can't fight the registry.
     for (var i = 0; i < root.pluginRows.length; i++) {
       var row = root.pluginRows[i]
       if (row.id === id && value === false && row.canDisable === false) return
     }
-    var remembered = value ? root.rememberedBarStates[String(id)] : null
-    var current = value ? null : root.barStateFor(id)
-    var changed = remembered
-      ? reg.setEnabled(id, true, remembered)
-      : reg.setEnabled(id, value)
-    if (!changed) return
-    if (!value && current) root.rememberBarState(id, current)
-    else if (value && remembered) {
-      root.restoreBarSettings(id, remembered)
-      root.rememberBarState(id, null)
-    }
-  }
-
-  function registryRevision() {
-    var reg = root.registry
-    return reg ? reg.registryRevision : 0
+    root.pluginToggleProcess.command = ["omarchy", "plugin", value ? "enable" : "disable", id]
+    root.pluginToggleProcess.running = true
   }
 
   function pluginEnabled(id) {
-    root.registryRevision()
-    var reg = root.registry
-    var manifest = reg && reg.installedPlugins ? reg.installedPlugins[id] : null
-    if (!manifest) return false
-    var kinds = Array.isArray(manifest.kinds) ? manifest.kinds : []
-    // Built-in widgets remain loadable even while absent from the bar, so the
-    // user-facing toggle follows their actual placement instead of isEnabled().
-    return kinds.indexOf("bar-widget") !== -1 && typeof reg.inBar === "function"
-      ? reg.inBar(id) === true
-      : reg.isEnabled(id) === true
-  }
-
-  Connections {
-    target: root.registry
-    function onRegistryRevisionChanged() {
-      root.invalidateGlyphCache()
-    }
-    function onScanFinished() {
-      root.refreshPlugins()
-    }
+    for (var i = 0; i < root.pluginRows.length; i++)
+      if (root.pluginRows[i].id === id) return root.pluginRows[i].enabled === true
+    return false
   }
 
   Component.onCompleted: {
@@ -1377,8 +1406,8 @@ Panel {
 
   function open() {
     refreshPlugins()
-    // Refresh marketplace badges at most once per open when data is stale.
-    if (!root.marketplaceFetching && Object.keys(root.marketplaceMap).length === 0) fetchMarketplace()
+    // Pick up verification changes while retaining cached badges during the fetch.
+    fetchMarketplace()
     root.controller.show()
     Qt.callLater(function() {
       if (root.opened) root.primeFocus()
@@ -1432,7 +1461,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(560))
-    contentHeight: panel.fittedContentHeight(Math.round(Style.space(560)))
+    contentHeight: panel.fittedContentHeight(Style.space(720))
 
     // ------------------------------------------------------------------- content
 
@@ -1559,6 +1588,7 @@ Panel {
       ColumnLayout {
         anchors.fill: parent
         anchors.margins: Style.space(16)
+        anchors.bottomMargin: 0
         spacing: Style.space(10)
 
         RowLayout {
@@ -1729,6 +1759,9 @@ Panel {
           Layout.fillWidth: true
 
           spacing: Style.space(8)
+          Layout.maximumHeight: implicitHeight
+          visible: root.updateSummary !== "" || root.removeSummary !== ""
+            || (root.removeSelectMode && root.selectedRemoveCount > 0)
 
           Label {
             visible: root.updateSummary !== ""

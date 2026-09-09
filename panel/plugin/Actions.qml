@@ -24,6 +24,8 @@ ColumnLayout {
   signal menuRequested(var sourceItem, real x, real y)
 
   readonly property bool showSourceRow: plugin.updatable && repoKnown
+  readonly property int menuWidth: toggle.trackHeight
+  readonly property int sourceWidth: toggle.implicitWidth + Style.space(6) + actions.menuWidth
 
   Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
   spacing: Style.space(4)
@@ -94,8 +96,14 @@ ColumnLayout {
       accent: Color.accent
       fontFamily: actions.fontFamily
       fontSize: Style.font.bodySmall
-      horizontalPadding: Style.space(6)
+      horizontalPadding: 0
       verticalPadding: Style.space(3)
+      Layout.preferredWidth: actions.menuWidth
+      Layout.minimumWidth: actions.menuWidth
+      Layout.maximumWidth: actions.menuWidth
+      Layout.preferredHeight: actions.menuWidth
+      Layout.minimumHeight: actions.menuWidth
+      Layout.maximumHeight: actions.menuWidth
       Layout.alignment: Qt.AlignVCenter
       onClicked: actions.menuRequested(menuButton, 0, menuButton.height)
     }
@@ -103,7 +111,10 @@ ColumnLayout {
 
   RowLayout {
     visible: actions.showSourceRow
-    Layout.fillWidth: true
+    Layout.preferredWidth: actions.sourceWidth
+    Layout.minimumWidth: actions.sourceWidth
+    Layout.maximumWidth: actions.sourceWidth
+    Layout.alignment: Qt.AlignRight
     spacing: Style.space(6)
 
     Button {
@@ -120,7 +131,7 @@ ColumnLayout {
       fontFamily: actions.fontFamily
       fontSize: Style.font.caption
       iconSize: Style.font.caption
-      horizontalPadding: Style.space(6)
+      horizontalPadding: 0
       verticalPadding: Style.space(3)
       Layout.fillWidth: true
       onClicked: actions.sourceRequested(actions.plugin.sourceKey)

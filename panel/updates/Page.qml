@@ -66,11 +66,11 @@ Rectangle {
     return Qt.darker(foreground, 1.4)
   }
 
-  function verificationText(id) {
+  function verificationText(id, sourceKey) {
     var entry = marketplaceMap[String(id)]
     if (entry) {
       if (entry.verified === true) return "Verified"
-      if (entry.snapshotStatus === "update-unverified") return "Update unverified"
+      if (entry.snapshotStatus === "update-unverified") return "Update Unverified"
       return "Unverified"
     }
     if (marketplaceFetching) return "Checking verification…"
@@ -78,7 +78,7 @@ Rectangle {
     return "Not listed"
   }
 
-  function verificationColor(id) {
+  function verificationColor(id, sourceKey) {
     var entry = marketplaceMap[String(id)]
     if (entry && entry.verified === true) return Color.accent
     if (entry && entry.snapshotStatus === "update-unverified")
@@ -179,7 +179,7 @@ Rectangle {
 
               required property var modelData
               width: updateList.width
-              height: Math.max(Style.space(52), row.implicitHeight + Style.space(16))
+              height: Math.max(Style.space(72), row.implicitHeight + Style.space(24))
               radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
               color: hover.hovered
                 ? Style.hoverFillFor(page.foreground, Color.accent)
@@ -235,6 +235,7 @@ Rectangle {
 
                   RowLayout {
                     Layout.fillWidth: true
+                    Layout.topMargin: Style.space(8)
                     spacing: Style.space(5)
 
                     Label {
@@ -253,12 +254,24 @@ Rectangle {
                       font.pixelSize: Style.font.caption
                     }
 
-                    Label {
-                      text: page.verificationText(updateRow.modelData.id)
-                      textFormat: Text.PlainText
-                      color: page.verificationColor(updateRow.modelData.id)
-                      font.family: page.fontFamily
-                      font.pixelSize: Style.font.caption
+                    Rectangle {
+                      readonly property bool updateUnverified: !!page.marketplaceMap[String(updateRow.modelData.id)]
+                        && page.marketplaceMap[String(updateRow.modelData.id)].verified !== true
+                        && page.marketplaceMap[String(updateRow.modelData.id)].snapshotStatus === "update-unverified"
+                      implicitWidth: verificationLabel.implicitWidth + Style.space(10)
+                      implicitHeight: Style.space(16)
+                      radius: height / 2
+                      color: updateUnverified ? Qt.rgba(0.85, 0.65, 0.13, 0.18) : "transparent"
+
+                      Label {
+                        id: verificationLabel
+                        anchors.centerIn: parent
+                        text: page.verificationText(updateRow.modelData.id, updateRow.modelData.sourceKey)
+                        textFormat: Text.PlainText
+                        color: page.verificationColor(updateRow.modelData.id, updateRow.modelData.sourceKey)
+                        font.family: page.fontFamily
+                        font.pixelSize: Style.font.caption
+                      }
                     }
                   }
 
@@ -377,6 +390,7 @@ Rectangle {
           RowLayout {
             Layout.fillWidth: true
             spacing: Style.space(8)
+            Layout.maximumHeight: implicitHeight
 
             Label {
               text: page.checking
@@ -413,7 +427,7 @@ Rectangle {
               fontFamily: page.fontFamily
               fontSize: Style.font.bodySmall
               horizontalPadding: Style.space(12)
-              verticalPadding: Style.space(6)
+              verticalPadding: Style.space(3)
               onClicked: page.updateAllRequested()
             }
           }

@@ -49,7 +49,7 @@ Item {
     id: card
 
     width: parent.width
-    height: Math.max(Style.space(56), Math.min(content.implicitHeight + Style.space(22), Style.space(120)))
+    height: Math.max(Style.space(72), content.implicitHeight + Style.space(24))
     clip: true
     radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
     color: hover.hovered
@@ -151,11 +151,11 @@ Item {
             radius: height / 2
             implicitWidth: badgeContent.implicitWidth + Style.space(10)
             implicitHeight: Style.space(16)
-            color: pluginRow.verified
-              ? Util.alpha(Color.accent, 0.18)
-              : pluginRow.updateUnverified
-                ? Qt.rgba(0.85, 0.65, 0.13, 0.18)
-                : Qt.rgba(pluginRow.foreground.r, pluginRow.foreground.g, pluginRow.foreground.b, 0.08)
+            color: pluginRow.updateUnverified
+              ? Qt.rgba(0.85, 0.65, 0.13, 0.18)
+              : pluginRow.verified
+                ? Util.alpha(Color.accent, 0.18)
+              : Qt.rgba(pluginRow.foreground.r, pluginRow.foreground.g, pluginRow.foreground.b, 0.08)
 
             Row {
               id: badgeContent
@@ -163,7 +163,7 @@ Item {
               spacing: Style.space(3)
 
               Text {
-                visible: pluginRow.verified
+                visible: pluginRow.verified && !pluginRow.updateUnverified
                 text: "\uf058"
                 textFormat: Text.PlainText
                 color: Color.accent
@@ -183,10 +183,10 @@ Item {
               }
 
               Text {
-                text: pluginRow.verified ? "Verified" : pluginRow.updateUnverified ? "Update unverified" : "Unverified"
+                text: pluginRow.updateUnverified ? "Update Unverified" : pluginRow.verified ? "Verified" : "Unverified"
                 textFormat: Text.PlainText
-                color: pluginRow.verified ? Color.accent
-                  : pluginRow.updateUnverified ? Qt.hsla(0.12, 0.75, 0.55, 1)
+                color: pluginRow.updateUnverified ? Qt.hsla(0.12, 0.75, 0.55, 1)
+                  : pluginRow.verified ? Color.accent
                   : Qt.darker(pluginRow.foreground, 2.0)
                 font.family: pluginRow.fontFamily
                 font.pixelSize: Style.font.caption - 1

@@ -17,8 +17,8 @@ assert_contains() {
 
 assert_contains 'required property var marketplaceMap' "$PAGE"
 assert_contains 'required property bool marketplaceFetchFailed' "$PAGE"
-assert_contains 'function verificationText(id)' "$PAGE"
-assert_contains 'page.verificationText(updateRow.modelData.id)' "$PAGE"
+assert_contains 'function verificationText(id, sourceKey)' "$PAGE"
+assert_contains 'page.verificationText(updateRow.modelData.id, updateRow.modelData.sourceKey)' "$PAGE"
 assert_contains 'marketplaceMap: root.marketplaceMap' "$PANEL"
 assert_contains 'marketplaceFetching: root.marketplaceFetching' "$PANEL"
 assert_contains 'marketplaceFetchFailed: root.marketplaceFetchFailed' "$PANEL"
