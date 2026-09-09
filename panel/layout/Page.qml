@@ -10,6 +10,12 @@ import qs.Ui
 // widgets in live order. Drag a chip within a column to reorder, or across
 // columns to move sections. Every drop calls back with (id, section, index)
 // and the owner applies it with `omarchy bar move`, so the bar follows.
+//
+// Interaction notes:
+// - The dragged chip stays in place as a dimmed placeholder; a thin accent
+//   line marks the exact insertion point. Neither changes delegate heights,
+//   so the list never shifts under the cursor mid-drag.
+// - Plain hover does nothing — only an active drag shows indicators.
 Rectangle {
   id: board
 
@@ -32,23 +38,31 @@ Rectangle {
 
   // Active drag state, shared across the three columns.
   property string dragId: ""
+  property string dragName: ""
   property string dragFromSection: ""
   property int dragFromIndex: -1
   property string dropSection: ""
   property int dropIndex: -1
+  property real ghostX: 0
+  property real ghostY: 0
 
-  function startDrag(id, section, index) {
+  function startDrag(id, name, section, index, x, y) {
     board.dragId = id
+    board.dragName = name
     board.dragFromSection = section
     board.dragFromIndex = index
     board.dropSection = section
     board.dropIndex = index
+    board.ghostX = x
+    board.ghostY = y
   }
 
-  function moveDrag(section, index) {
+  function moveDrag(section, index, x, y) {
     if (board.dragId === "") return
     board.dropSection = section
     board.dropIndex = index
+    board.ghostX = x
+    board.ghostY = y
   }
 
   function endDrag() {
@@ -59,6 +73,7 @@ Rectangle {
     var fromSection = board.dragFromSection
     var fromIndex = board.dragFromIndex
     board.dragId = ""
+    board.dragName = ""
     board.dragFromSection = ""
     board.dragFromIndex = -1
     board.dropSection = ""
@@ -72,6 +87,7 @@ Rectangle {
 
   function cancelDrag() {
     board.dragId = ""
+    board.dragName = ""
     board.dragFromSection = ""
     board.dragFromIndex = -1
     board.dropSection = ""
@@ -111,7 +127,7 @@ Rectangle {
     }
 
     Label {
-      text: "Drag widgets within or across sections to reorder the bar."
+      text: "Drag a widget to reorder — within its section or across sections."
       textFormat: Text.PlainText
       color: Qt.darker(board.foreground, 1.5)
       font.family: board.fontFamily
@@ -133,6 +149,7 @@ Rectangle {
 
           readonly property string section: modelData.section
           readonly property var entries: modelData.entries
+          readonly property bool isDropColumn: board.dragId !== "" && board.dropSection === column.section
 
           Layout.fillWidth: true
           Layout.fillHeight: true
@@ -152,10 +169,10 @@ Rectangle {
             Layout.fillWidth: true
             Layout.fillHeight: true
             radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
-            color: board.dropSection === column.section && board.dragId !== ""
+            color: column.isDropColumn
               ? Util.alpha(Color.accent, 0.08)
               : Util.alpha(board.foreground, 0.04)
-            border.color: board.dropSection === column.section && board.dragId !== ""
+            border.color: column.isDropColumn
               ? Util.alpha(Color.accent, 0.5)
               : Util.alpha(board.foreground, 0.12)
             border.width: 1
@@ -178,43 +195,33 @@ Rectangle {
                 readonly property string widgetId: modelData.id
                 readonly property string widgetName: modelData.name
                 readonly property bool isDragged: board.dragId === widgetId
-                readonly property bool isDropBefore: board.dragId !== ""
+                // Insertion line sits above this chip.
+                readonly property bool showLineAbove: board.dragId !== ""
                   && board.dropSection === column.section
-                  && board.dropIndex === chip.index
-                readonly property bool isDropAfter: board.dragId !== ""
+                  && board.dropIndex === index
+                // Insertion line sits below the last chip.
+                readonly property bool showLineBelow: board.dragId !== ""
                   && board.dropSection === column.section
-                  && board.dropIndex === chip.index + 1
-                  && chip.index === sectionList.count - 1
+                  && board.dropIndex === index + 1
+                  && index === sectionList.count - 1
 
                 width: sectionList.width
-                height: chipCard.height + (isDropBefore ? Style.space(30) : 0) + (isDropAfter ? Style.space(30) : 0)
-
-                // Drop indicator above the chip.
-                Rectangle {
-                  visible: chip.isDropBefore
-                  anchors.top: parent.top
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  height: Style.space(26)
-                  radius: height / 2
-                  color: Util.alpha(Color.accent, 0.25)
-                }
+                // Fixed height: the drop line is an overlay and never
+                // changes delegate geometry, so the list stays still.
+                height: Style.space(34)
 
                 Rectangle {
                   id: chipCard
-                  anchors.left: parent.left
-                  anchors.right: parent.right
-                  y: chip.isDropBefore ? Style.space(30) : 0
-                  height: Style.space(34)
+                  anchors.fill: parent
                   radius: height / 2
                   color: chip.isDragged
-                    ? Util.alpha(Color.accent, 0.3)
+                    ? Util.alpha(Color.accent, 0.25)
                     : Style.normalFillFor(board.foreground, Color.accent)
                   border.color: chip.isDragged
                     ? Color.accent
                     : Util.alpha(board.foreground, 0.15)
                   border.width: 1
-                  opacity: chip.isDragged ? 0.7 : 1.0
+                  opacity: chip.isDragged ? 0.55 : 1.0
 
                   RowLayout {
                     anchors.fill: parent
@@ -238,7 +245,6 @@ Rectangle {
                       color: board.foreground
                       font.family: board.fontFamily
                       font.pixelSize: Style.font.bodySmall
-                      font.bold: chip.isDragged
                       Layout.fillWidth: true
                       Layout.alignment: Qt.AlignVCenter
                     }
@@ -249,11 +255,9 @@ Rectangle {
                     hoverEnabled: true
                     cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
                     acceptedButtons: Qt.LeftButton
-                    drag.target: dragProxy
-                    drag.axis: Drag.XAndYAxis
 
-                    property int pressX: 0
-                    property int pressY: 0
+                    property real pressX: 0
+                    property real pressY: 0
                     property bool dragging: false
 
                     onPressed: function(mouse) {
@@ -265,10 +269,13 @@ Rectangle {
                       if (!dragging
                         && (Math.abs(mouse.x - pressX) > 6 || Math.abs(mouse.y - pressY) > 6)) {
                         dragging = true
-                        board.startDrag(chip.widgetId, column.section, chip.index)
+                        // NOTE: bare `index` — the Repeater context property.
+                        // `chip.index` does not resolve and breaks drop math.
+                        var start = board.mapFromItem(chip, mouse.x, mouse.y)
+                        board.startDrag(chip.widgetId, chip.widgetName, column.section, index, start.x, start.y)
                       }
                       if (dragging) {
-                        var p = chip.mapToItem(board, mouse.x, mouse.y)
+                        var p = board.mapFromItem(chip, mouse.x, mouse.y)
                         board.updateDropTarget(p.x, p.y)
                       }
                     }
@@ -279,24 +286,41 @@ Rectangle {
                   }
                 }
 
-                // Drop indicator below the last chip.
+                // Insertion marker: a thin accent line overlaid at the top
+                // edge (or bottom edge for the end-of-list slot). Overlay —
+                // never affects layout, never shifts siblings.
                 Rectangle {
-                  visible: chip.isDropAfter
-                  anchors.bottom: parent.bottom
+                  visible: chip.showLineAbove
+                  anchors.top: parent.top
+                  anchors.topMargin: -Style.space(3)
                   anchors.left: parent.left
                   anchors.right: parent.right
-                  height: Style.space(26)
+                  height: Style.space(3)
                   radius: height / 2
-                  color: Util.alpha(Color.accent, 0.25)
+                  color: Color.accent
+                }
+
+                Rectangle {
+                  visible: chip.showLineBelow
+                  anchors.bottom: parent.bottom
+                  anchors.bottomMargin: -Style.space(3)
+                  anchors.left: parent.left
+                  anchors.right: parent.right
+                  height: Style.space(3)
+                  radius: height / 2
+                  color: Color.accent
                 }
               }
 
-              // Empty column still accepts drops.
+              // Empty column still accepts drops: any motion over it targets
+              // index 0, release commits the move.
               MouseArea {
                 anchors.fill: parent
                 visible: sectionList.count === 0
-                onPressed: function(mouse) {
-                  if (board.dragId !== "") board.moveDrag(column.section, 0)
+                onPositionChanged: function(mouse) {
+                  if (board.dragId === "") return
+                  var p = board.mapFromItem(sectionList, mouse.x, mouse.y)
+                  board.moveDrag(column.section, 0, p.x, p.y)
                 }
                 onReleased: {
                   if (board.dragId !== "") board.endDrag()
@@ -309,12 +333,34 @@ Rectangle {
     }
   }
 
-  // Floating ghost following the cursor during a drag.
+  // Ghost chip following the cursor during a drag.
   Rectangle {
-    id: dragProxy
-    visible: false
-    width: 0
-    height: 0
+    id: ghost
+    visible: board.dragId !== ""
+    width: Math.min(Style.space(200), board.width / 3 - Style.space(16))
+    height: Style.space(34)
+    radius: height / 2
+    color: Util.alpha(Color.accent, 0.85)
+    border.color: Color.accent
+    border.width: 1
+    x: board.ghostX - width / 2
+    y: board.ghostY - height / 2
+    z: 100
+    opacity: 0.9
+
+    Text {
+      anchors.centerIn: parent
+      width: parent.width - Style.space(16)
+      horizontalAlignment: Text.AlignHCenter
+      elide: Text.ElideRight
+      maximumLineCount: 1
+      text: board.dragName
+      textFormat: Text.PlainText
+      color: Color.background
+      font.family: board.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      font.bold: true
+    }
   }
 
   function updateDropTarget(x, y) {
@@ -324,10 +370,10 @@ Rectangle {
       var list = board._lists[names[i]]
       if (!list) continue
       var p = board.mapToItem(list, x, y)
-      if (p.x < 0 || p.y < -Style.space(40) || p.x > list.width
+      if (p.x < -Style.space(20) || p.y < -Style.space(40) || p.x > list.width + Style.space(20)
         || p.y > list.height + Style.space(40)) continue
       var idx = list.indexAt(list.width / 2, Math.max(0, Math.min(list.height - 1, p.y)))
-      board.moveDrag(names[i], idx === -1 ? list.count : idx)
+      board.moveDrag(names[i], idx === -1 ? list.count : idx, x, y)
       return
     }
   }
@@ -339,5 +385,20 @@ Rectangle {
     for (var k in board._lists) next[k] = board._lists[k]
     next[section] = list
     board._lists = next
+  }
+
+  // Position tracker covering gaps between chips and column padding.
+  // NoButton: tracks motion without stealing press/release from chips.
+  // Release always lands on the chip holding the mouse grab, so its own
+  // onReleased commits the drop no matter where the cursor ends up.
+  MouseArea {
+    anchors.fill: parent
+    enabled: board.dragId !== ""
+    acceptedButtons: Qt.NoButton
+    hoverEnabled: true
+    z: 50
+    onPositionChanged: function(mouse) {
+      board.updateDropTarget(mouse.x, mouse.y)
+    }
   }
 }
