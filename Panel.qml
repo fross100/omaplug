@@ -211,6 +211,7 @@ Panel {
   property var removeSelection: ({})
   property bool removeSelectMode: false
   property string removeSummary: ""
+  property string moveSummary: ""
   property var removeQueue: []
   property bool removingPlugin: false
   property bool removeConfirmOpen: false
@@ -1393,6 +1394,133 @@ Panel {
     return false
   }
 
+  // Bar-widget placement via the same CLI the bar group uses. Upstream
+  // drives enable/disable through `omarchy plugin …` subprocesses, so move
+  // follows the same pattern with `omarchy bar move` instead of touching
+  // the shell registry (which user panels no longer reach).
+  property var barLayoutCache: ({ left: [], center: [], right: [] })
+  property Process barLayoutProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyBarLayout(barLayoutStdout.text)
+    }
+    stdout: StdioCollector {
+      id: barLayoutStdout
+      waitForEnd: true
+    }
+  }
+  property Process barMoveProcess: Process {
+    onExited: function(exitCode) {
+      var err = String(barMoveStdout.text || "").trim()
+      if (exitCode !== 0) {
+        root.moveSummary = "Move failed" + (err ? ": " + err : "")
+      } else if (root.movePending !== "") {
+        root.moveSummary = "Moved " + root.movePending + "."
+      }
+      root.movePending = ""
+      root.refreshBarLayout()
+      root.refreshPlugins()
+    }
+    stdout: StdioCollector {
+      id: barMoveStdout
+      waitForEnd: true
+    }
+  }
+  property string movePending: ""
+
+  function refreshBarLayout() {
+    if (root.barLayoutProcess.running) return
+    root.barLayoutProcess.command = ["bash", "-c", "cat \"${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json\""]
+    root.barLayoutProcess.running = true
+  }
+
+  function applyBarLayout(text) {
+    var config
+    try { config = JSON.parse(String(text || "")) }
+    catch (e) {
+      console.warn("Could not parse shell.json for bar layout:", e)
+      return
+    }
+    var layout = config && config.bar ? config.bar.layout : null
+    var next = { left: [], center: [], right: [] }
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var entries = layout && Array.isArray(layout[sections[s]]) ? layout[sections[s]] : []
+      var ids = []
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i]
+        var id = entry && typeof entry === "object" ? entry.id : entry
+        if (id) ids.push(String(id))
+      }
+      next[sections[s]] = ids
+    }
+    root.barLayoutCache = next
+  }
+
+  // Move state for the row-menu "Move to" actions. Only bar-widgets that are
+  // currently on the bar can move; anything else hides the menu entries.
+  function barSectionFor(id) {
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var ids = root.barLayoutCache[sections[s]] || []
+      if (ids.indexOf(String(id)) !== -1) return sections[s]
+    }
+    return ""
+  }
+
+  function rowKinds(id) {
+    for (var i = 0; i < root.pluginRows.length; i++)
+      if (root.pluginRows[i].id === String(id)) return String(root.pluginRows[i].kinds || "")
+    return ""
+  }
+
+  function rowName(id) {
+    for (var i = 0; i < root.pluginRows.length; i++)
+      if (root.pluginRows[i].id === String(id)) return String(root.pluginRows[i].name || id)
+    return String(id)
+  }
+
+  function canMoveWidget(id) {
+    if (rowKinds(id).split(", ").indexOf("bar-widget") === -1) return false
+    return root.barSectionFor(id) !== ""
+  }
+
+  function moveWidgetToSection(id, section) {
+    if (["left", "center", "right"].indexOf(section) === -1) return
+    if (root.barMoveProcess.running) return
+    if (root.barSectionFor(id) === section) return
+    root.keepOpenAcrossRebuild()
+    root.movePending = id + " to " + section
+    root.moveSummary = "Moving " + id + "…"
+    root.barMoveProcess.command = ["omarchy", "bar", "move", id, "--section", section]
+    root.barMoveProcess.running = true
+  }
+
+  function moveWidgetToPosition(id, section, index) {
+    if (["left", "center", "right"].indexOf(section) === -1) return
+    if (root.barMoveProcess.running) return
+    root.keepOpenAcrossRebuild()
+    var target = Math.max(0, Math.floor(Number(index) || 0))
+    root.movePending = id + " to " + section
+    root.moveSummary = "Moving " + id + "…"
+    root.barMoveProcess.command = ["omarchy", "bar", "move", id, "--section", section, "--index", String(target)]
+    root.barMoveProcess.running = true
+  }
+
+  // Live bar layout grouped per section for the layout board.
+  function layoutSections() {
+    var out = []
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var ids = root.barLayoutCache[sections[s]] || []
+      var items = []
+      for (var i = 0; i < ids.length; i++) {
+        items.push({ id: ids[i], name: root.rowName(ids[i]) })
+      }
+      out.push({ section: sections[s], entries: items })
+    }
+    return out
+  }
+
   Component.onCompleted: {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
@@ -1408,10 +1536,17 @@ Panel {
     refreshPlugins()
     // Pick up verification changes while retaining cached badges during the fetch.
     fetchMarketplace()
+    root.refreshBarLayout()
     root.controller.show()
     Qt.callLater(function() {
       if (root.opened) root.primeFocus()
     })
+  }
+
+  // Reopen marker so the panel stays on top across the bar rebuild that a
+  // move triggers. (Full keep-open machinery arrives in a later commit;
+  // this stub keeps this commit working on its own.)
+  function keepOpenAcrossRebuild() {
   }
 
   function close() {
@@ -1761,6 +1896,7 @@ Panel {
           spacing: Style.space(8)
           Layout.maximumHeight: implicitHeight
           visible: root.updateSummary !== "" || root.removeSummary !== ""
+            || root.moveSummary !== ""
             || (root.removeSelectMode && root.selectedRemoveCount > 0)
 
           Label {
@@ -1775,6 +1911,15 @@ Panel {
           Label {
             visible: root.removeSummary !== ""
             text: root.removeSummary
+            textFormat: Text.PlainText
+            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Label {
+            visible: root.moveSummary !== ""
+            text: root.moveSummary
             textFormat: Text.PlainText
             color: Style.selectedStateColor(root.contentForeground, Color.accent)
             font.family: root.contentFontFamily
@@ -1850,6 +1995,8 @@ Panel {
       foreground: root.contentForeground
       fontFamily: root.contentFontFamily
       panelBackground: root.panelBackground
+      canMove: rowMenuOverlay.plugin ? root.canMoveWidget(rowMenuOverlay.plugin.id) : false
+      currentSection: rowMenuOverlay.plugin ? root.barSectionFor(rowMenuOverlay.plugin.id) : ""
 
       onCloseRequested: root.closeRowMenu()
       onEnabledChangeRequested: function(pluginId, enabled) {
@@ -1858,6 +2005,7 @@ Panel {
       onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
       onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onRemovalRequested: function(pluginId) { root.removePlugin(pluginId) }
+      onMoveRequested: function(pluginId, section) { root.moveWidgetToSection(pluginId, section) }
     }
 
     Dialogs.Confirm {
