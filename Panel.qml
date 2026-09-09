@@ -9,6 +9,7 @@ import qs.Commons
 import qs.Ui
 import "panel/Presentation.js" as Presentation
 import "panel/dialogs" as Dialogs
+import "panel/layout" as Arrange
 import "panel/plugin" as Plugin
 import "panel/updates" as Updates
 
@@ -34,6 +35,13 @@ Panel {
   // ------------------------------------------------------------------ plugins
 
   property var pluginRows: []
+  property var nestedWidgetIds: ({})
+  property Process pluginConfigProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyPluginConfig(pluginConfigStdout.text)
+    }
+    stdout: StdioCollector { id: pluginConfigStdout; waitForEnd: true }
+  }
   property Process pluginListProcess: Process {
     onExited: function(exitCode) {
       if (exitCode === 0) root.applyPluginList(pluginListStdout.text)
@@ -72,6 +80,7 @@ Panel {
   property bool marketplaceFetching: false
   property bool marketplaceFetchFailed: false
   property string marketplaceFetchedAt: ""
+  property string marketplaceHelperPath: ""
 
   // Local HEAD commit for every git-managed plugin dir, keyed by folder name.
   // Filled alongside the repo remote scan so rows can compare the installed
@@ -161,6 +170,58 @@ Panel {
     return kinds.indexOf(root.filterKind) !== -1
   }
 
+  // Background auto-check: whether to poll for updates without the panel
+  // being opened, and how often. Persisted in this widget's shell.json entry
+  // so the choice survives shell restarts and is per-user, not per-checkout.
+  // Mirrored verbatim in tests/AutoCheckLogic.qml; keep both copies
+  // identical, or auto-check-test.sh's sync guard will fail the build.
+  // AUTOCHECK-SETTINGS-BEGIN
+  readonly property bool autoCheckEnabled: root.setting("autoCheckUpdates", false) === true
+  // real, not int: an int property truncates any fractional hours value
+  // (e.g. 0.5) towards zero, which would silently turn into a zero-interval
+  // Timer below and spin checkUpdates() in a tight loop.
+  readonly property real autoCheckIntervalHours: {
+    var hours = Number(root.setting("autoCheckIntervalHours", 6))
+    return (isFinite(hours) && hours > 0) ? hours : 6
+  }
+  // AUTOCHECK-SETTINGS-END
+
+  function persistAutoCheckSetting(values) {
+    if (autoCheckSettingsProcess.running) return
+    var key = Object.keys(values)[0]
+    autoCheckSettingsProcess.command = ["omarchy", "bar", "set", root.moduleName,
+      key, JSON.stringify(values[key]), "--json"]
+    autoCheckSettingsProcess.pendingValues = values
+    autoCheckSettingsProcess.running = true
+  }
+
+  property Process autoCheckSettingsProcess: Process {
+    property var pendingValues: ({})
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyAutoCheckSettings(pendingValues)
+      else root.updateSummary = "Could not save automatic update settings."
+    }
+  }
+
+  function applyAutoCheckSettings(values) {
+    var entry = { id: root.moduleName }
+    for (var existing in root.settings) if (existing !== "id") entry[existing] = root.settings[existing]
+    for (var key in values) entry[key] = values[key]
+
+    root.settings = entry
+    if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
+  }
+
+  function setAutoCheckEnabled(value) {
+    root.persistAutoCheckSetting({ autoCheckUpdates: value === true })
+  }
+
+  function setAutoCheckIntervalHours(hours) {
+    var value = Number(hours)
+    if (!isFinite(value) || value <= 0) return
+    root.persistAutoCheckSetting({ autoCheckIntervalHours: value })
+  }
+
   // Update checking state, keyed by the plugin folder name (sourceKey).
   property var updateStates: ({})
   property bool checkingUpdates: false
@@ -172,6 +233,10 @@ Panel {
   // panel reconnects to the same job via this runtime status file.
   property string updateHelperPath: ""
   property string updateRunnerPath: ""
+  // Wraps plugin-state.sh with a lock+cache so the omaplug instance on each
+  // monitor's bar doesn't independently re-fetch every plugin's remote when
+  // the background timer (not a user click) is what triggered the check.
+  property string autoCheckCoordinatorPath: ""
   readonly property string updateStateRoot: {
     var runtime = Quickshell.env("XDG_RUNTIME_DIR")
     return runtime && runtime !== ""
@@ -211,6 +276,7 @@ Panel {
   property var removeSelection: ({})
   property bool removeSelectMode: false
   property string removeSummary: ""
+  property string moveSummary: ""
   property var removeQueue: []
   property bool removingPlugin: false
   property bool removeConfirmOpen: false
@@ -219,6 +285,9 @@ Panel {
   // relaunches the shell so plugins reload from source (fixes stale compiled
   // plugin QML that a live rescan would keep serving).
   property bool restartConfirmOpen: false
+  // Bar-layout board (drag-and-drop ordering across left/center/right).
+  property bool layoutPageOpen: false
+  readonly property var barLayoutSections: root.layoutSections()
   // Right-click context menu on a main-page row.
   property bool rowMenuOpen: false
   property string rowMenuId: ""
@@ -316,23 +385,26 @@ Panel {
     return ""
   }
 
-  function isStandaloneGlyph(text) {
-    var s = String(text || "").trim()
-    if (s.length === 0) return false
-    // Private-use glyphs (Nerd Fonts) live in U+E000-U+F8FF and surrogate pairs.
-    // A standalone tile should be 1-2 glyphs at most; anything longer with
-    // alphanumerics or spaced tokens like "1h 58m" is a live label, not an icon.
-    if (/[a-zA-Z0-9]/.test(s) && s.split(/\s+/).length > 1) return false
-    if (s.length > 4) return false
-    return /^[\uE000-\uF8FF\ud800-\udfff\s]+$/.test(s)
+  // A bar-button label can combine an icon with live state (durations,
+  // counters, temperatures, etc.). Keep only a leading Nerd Font glyph so
+  // that status text never leaks into a fixed-size plugin icon tile.
+  function leadingIconGlyph(text) {
+    var s = String(text || "")
+    if (s.length === 0) return ""
+
+    var first = s.charCodeAt(0)
+    if (first >= 0xE000 && first <= 0xF8FF) return s.charAt(0)
+    if (first < 0xD800 || first > 0xDBFF || s.length < 2) return ""
+
+    var second = s.charCodeAt(1)
+    if (second < 0xDC00 || second > 0xDFFF) return ""
+    var codePoint = (first - 0xD800) * 0x400 + second - 0xDC00 + 0x10000
+    // Nerd Font's supplementary glyphs are in the Supplementary Private Use
+    // Areas (planes 15 and 16). Do not turn arbitrary emoji into row icons.
+    return codePoint >= 0xF0000 && codePoint <= 0x10FFFD ? s.substring(0, 2) : ""
   }
 
   function iconFor(id) {
-    // The clock widget's live button text is the current time, which reads
-    // like noise as a row icon — always show the clock glyph for it instead.
-    if (/clock/i.test(String(id))) return "\uf017"
-    var live = root.liveGlyphFor(id)
-    if (live && root.isStandaloneGlyph(live)) return live
     var map = {
       "omaplug":            "\udb85\udcd9",
       "adna.bar":            "\uf2f2",
@@ -366,6 +438,9 @@ Panel {
       "omarchy.polkit":      "\uf3ed",
       "omarchy.reminders":   "\uf017"
     }
+    if (/clock/i.test(String(id))) return "\uf017"
+    var live = root.leadingIconGlyph(root.liveGlyphFor(id))
+    if (live) return live
     return map[id] || ""
   }
 
@@ -394,6 +469,9 @@ Panel {
     return count > 0 ? " (" + count + " error" + (count === 1 ? "" : "s") + ")" : ""
   }
 
+  // Mirrored verbatim in tests/AutoCheckLogic.qml; keep both copies
+  // identical, or auto-check-test.sh's sync guard will fail the build.
+  // PENDING-UPDATE-COUNT-BEGIN
   readonly property int pendingUpdateCount: {
     var n = 0
     for (var k in root.updateStates) {
@@ -402,6 +480,7 @@ Panel {
     }
     n
   }
+  // PENDING-UPDATE-COUNT-END
 
   readonly property int enabledPluginCount: {
     var n = 0
@@ -448,6 +527,7 @@ Panel {
   }
 
   function confirmRemove() {
+    root.keepOpenAcrossRebuild()
     root.removeQueue = root.removePending.slice()
     root.removePending = []
     root.removeConfirmOpen = false
@@ -571,17 +651,48 @@ Panel {
   // Fetches every git-managed plugin's remote and reports which are behind.
   // The script echoes a CHECK line before each plugin so the updates page can
   // show per-plugin progress while the fetch runs, then the result line.
-  function checkUpdates() {
-    var dir = Quickshell.env("HOME") + "/.config/omarchy/plugins"
-    if (!dir || root.updateHelperPath === "" || root.checkingUpdates || root.updateDetachedRunning) return
+  //
+  // helperPath defaults to plugin-state.sh (the manual "Check for updates"
+  // button always uses this, unparameterized). The background Timer below
+  // instead passes autoCheckCoordinatorPath: the omaplug bar widget exists
+  // once per monitor, each running its own independent Panel.qml/Timer, so
+  // an unattended tick would otherwise fire N simultaneous, fully redundant
+  // fetch passes over every installed plugin. The coordinator wraps
+  // plugin-state.sh with a lock + shared cache so only one instance's timer
+  // tick actually runs it; the others reuse that output.
+  function checkUpdates(helperPath) {
+    var dir = (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/plugins"
+    var helper = helperPath || root.updateHelperPath
+    if (!dir || helper === "" || root.checkingUpdates || root.updateDetachedRunning) return
     root.checkingUpdates = true
     root.updateSummary = ""
-    root.updateStates = ({})
+    // Deliberately not reset: this now also runs unattended in the
+    // background (autoUpdateCheckTimer below), and blanking every row/the
+    // bar badge back to "Pending" for the duration of a check the user never
+    // asked for would read as a regression flashing by on its own. Each
+    // plugin's entry is overwritten in place as its fresh CHECK/result line
+    // streams in (applyUpdateCheckLine), so a still-installed plugin only
+    // ever shows its last known state or a newer one, never a gap.
     root.updateCheckLineBuf = ""
     root.updateCheckProcessed = 0
     root.checkWatchdog.restart()
-    updateCheckProcess.command = [root.updateHelperPath, dir]
+    updateCheckProcess.command = [helper, dir]
     updateCheckProcess.running = true
+  }
+
+  // Runs checkUpdates() on its own, whether or not the panel is open (the
+  // BarWidget's Loader keeps this item alive in the background). checkUpdates
+  // already no-ops while a check or an update is in flight, so this can't
+  // step on a user-initiated check. Toggling autoCheckEnabled pauses/resumes
+  // the timer immediately; changing autoCheckIntervalHours re-times it on the
+  // next tick without needing a restart.
+  Timer {
+    id: autoUpdateCheckTimer
+    interval: root.autoCheckIntervalHours * 3600000
+    running: root.autoCheckEnabled && root.autoCheckCoordinatorPath !== "" && root.hostWidget !== null
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.checkUpdates(root.autoCheckCoordinatorPath)
   }
 
   // Per-line parser for plugin-state.sh output: tab-separated
@@ -823,11 +934,10 @@ Panel {
   // Fetches the public marketplace catalog (capped at 2 MB like every other
   // retained output) and builds the id -> {verified} map.
   function fetchMarketplace() {
-    if (root.marketplaceFetching) return
+    if (root.marketplaceFetching || root.marketplaceHelperPath === "") return
     root.marketplaceFetching = true
     root.marketplaceFetchFailed = false
-    marketplaceProcess.command = ["curl", "-fsSL", "--max-time", "20", "--max-filesize", "8388608",
-      "https://plugins.omarchy.org/catalog.json"]
+    marketplaceProcess.command = [root.marketplaceHelperPath]
     marketplaceProcess.running = true
   }
 
@@ -837,7 +947,9 @@ Panel {
     var map = {}
     try {
       var catalog = JSON.parse(String(text || "{}"))
-      var plugins = catalog.plugins || []
+      if (!catalog || typeof catalog !== "object" || !Array.isArray(catalog.plugins))
+        throw new Error("catalog.plugins is not an array")
+      var plugins = catalog.plugins
       for (var i = 0; i < plugins.length; i++) {
         var entry = plugins[i]
         if (!entry || typeof entry.id !== "string" || !entry.id) continue
@@ -1263,6 +1375,25 @@ Panel {
     if (root.pluginListProcess.running) return
     root.pluginListProcess.command = ["omarchy", "plugin", "list", "--json"]
     root.pluginListProcess.running = true
+    if (!root.pluginConfigProcess.running) {
+      root.pluginConfigProcess.command = ["omarchy-shell", "shell", "listShellConfig"]
+      root.pluginConfigProcess.running = true
+    }
+  }
+
+  function applyPluginConfig(text) {
+    var config = {}
+    try { config = JSON.parse(String(text || "{}")) } catch (e) { return }
+    var nested = {}
+    var layout = config.bar && config.bar.layout ? config.bar.layout : {}
+    for (var section in layout) {
+      var entries = Array.isArray(layout[section]) ? layout[section] : []
+      for (var i = 0; i < entries.length; i++) {
+        var widgets = entries[i] && Array.isArray(entries[i].widgets) ? entries[i].widgets : []
+        for (var j = 0; j < widgets.length; j++) nested[String(widgets[j])] = true
+      }
+    }
+    root.nestedWidgetIds = nested
   }
 
   function applyPluginList(text) {
@@ -1370,8 +1501,7 @@ Panel {
         sourceKey: row.sourceKey,
         updatable: row.updatable,
         enabled: row.enabled
-      })
-    }
+      })    }
     root.pluginRows = rows
   }
 
@@ -1383,23 +1513,213 @@ Panel {
       var row = root.pluginRows[i]
       if (row.id === id && value === false && row.canDisable === false) return
     }
-    root.pluginToggleProcess.command = ["omarchy", "plugin", value ? "enable" : "disable", id]
+    root.keepOpenAcrossRebuild()
+    var nested = root.nestedWidgetIds[String(id)] === true
+    var helper = String(Qt.resolvedUrl("nested-widget-toggle.sh")).replace(/^file:\/\//, "")
+    root.pluginToggleProcess.command = !value && nested
+      ? ["setsid", "-f", helper, id, "disable"]
+      : ["omarchy", "plugin", value ? "enable" : "disable", id]
     root.pluginToggleProcess.running = true
   }
 
   function pluginEnabled(id) {
     for (var i = 0; i < root.pluginRows.length; i++)
-      if (root.pluginRows[i].id === id) return root.pluginRows[i].enabled === true
+      if (root.pluginRows[i].id === id)
+        return root.pluginRows[i].enabled === true || root.nestedWidgetIds[String(id)] === true
     return false
+  }
+
+  // Bar-widget placement via the same CLI the bar group uses. Upstream
+  // drives enable/disable through `omarchy plugin …` subprocesses, so move
+  // follows the same pattern with `omarchy bar move` instead of touching
+  // the shell registry (which user panels no longer reach).
+  property var barLayoutCache: ({ left: [], center: [], right: [] })
+  property Process barLayoutProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyBarLayout(barLayoutStdout.text)
+    }
+    stdout: StdioCollector {
+      id: barLayoutStdout
+      waitForEnd: true
+    }
+  }
+  property Process barMoveProcess: Process {
+    onExited: function(exitCode) {
+      var err = String(barMoveStdout.text || "").trim()
+      if (exitCode !== 0) {
+        root.moveSummary = "Move failed" + (err ? ": " + err : "")
+      } else if (root.movePending !== "") {
+        root.moveSummary = "Moved " + root.movePending + "."
+      }
+      root.movePending = ""
+      root.refreshBarLayout()
+      root.refreshPlugins()
+    }
+    stdout: StdioCollector {
+      id: barMoveStdout
+      waitForEnd: true
+    }
+  }
+  property string movePending: ""
+
+  function refreshBarLayout() {
+    if (root.barLayoutProcess.running) return
+    root.barLayoutProcess.command = ["bash", "-c", "cat \"${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/shell.json\""]
+    root.barLayoutProcess.running = true
+  }
+
+  function applyBarLayout(text) {
+    var config
+    try { config = JSON.parse(String(text || "")) }
+    catch (e) {
+      console.warn("Could not parse shell.json for bar layout:", e)
+      return
+    }
+    var layout = config && config.bar ? config.bar.layout : null
+    var next = { left: [], center: [], right: [] }
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var entries = layout && Array.isArray(layout[sections[s]]) ? layout[sections[s]] : []
+      var ids = []
+      for (var i = 0; i < entries.length; i++) {
+        var entry = entries[i]
+        var id = entry && typeof entry === "object" ? entry.id : entry
+        if (id) ids.push(String(id))
+      }
+      next[sections[s]] = ids
+    }
+    root.barLayoutCache = next
+  }
+
+  // Move state for the row-menu "Move to" actions. Only bar-widgets that are
+  // currently on the bar can move; anything else hides the menu entries.
+  function barSectionFor(id) {
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var ids = root.barLayoutCache[sections[s]] || []
+      if (ids.indexOf(String(id)) !== -1) return sections[s]
+    }
+    return ""
+  }
+
+  function rowKinds(id) {
+    for (var i = 0; i < root.pluginRows.length; i++)
+      if (root.pluginRows[i].id === String(id)) return String(root.pluginRows[i].kinds || "")
+    return ""
+  }
+
+  function rowName(id) {
+    for (var i = 0; i < root.pluginRows.length; i++)
+      if (root.pluginRows[i].id === String(id)) return String(root.pluginRows[i].name || id)
+    return String(id)
+  }
+
+  function canMoveWidget(id) {
+    if (rowKinds(id).split(", ").indexOf("bar-widget") === -1) return false
+    return root.barSectionFor(id) !== ""
+  }
+
+  function moveWidgetToSection(id, section) {
+    if (["left", "center", "right"].indexOf(section) === -1) return
+    if (root.barMoveProcess.running) return
+    if (root.barSectionFor(id) === section) return
+    root.keepOpenAcrossRebuild()
+    root.movePending = id + " to " + section
+    root.moveSummary = "Moving " + id + "…"
+    root.barMoveProcess.command = ["omarchy", "bar", "move", id, "--section", section]
+    root.barMoveProcess.running = true
+  }
+
+  function moveWidgetToPosition(id, section, index) {
+    if (["left", "center", "right"].indexOf(section) === -1) return
+    if (root.barMoveProcess.running) return
+    root.keepOpenAcrossRebuild()
+    var target = Math.max(0, Math.floor(Number(index) || 0))
+    root.movePending = id + " to " + section
+    root.moveSummary = "Moving " + id + "…"
+    root.barMoveProcess.command = ["omarchy", "bar", "move", id, "--section", section, "--index", String(target)]
+    root.barMoveProcess.running = true
+  }
+
+  // Live bar layout grouped per section for the layout board.
+  function layoutSections() {
+    var out = []
+    var sections = ["left", "center", "right"]
+    for (var s = 0; s < sections.length; s++) {
+      var ids = root.barLayoutCache[sections[s]] || []
+      var items = []
+      for (var i = 0; i < ids.length; i++) {
+        items.push({ id: ids[i], name: root.rowName(ids[i]) })
+      }
+      out.push({ section: sections[s], entries: items })
+    }
+    return out
   }
 
   Component.onCompleted: {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
+    root.marketplaceHelperPath = String(Qt.resolvedUrl("marketplace-catalog.sh")).replace(/^file:\/\//, "")
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
+    root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
     fetchMarketplace()
     Qt.callLater(function() { updateStatusFile.reload() })
+    // A toggle/move/remove rewrites shell.json, and the bar rebuilds every
+    // widget on every monitor in response — including this panel's own
+    // Loader, which destroys the open instance. Consume a pending reopen
+    // flag (state file) so the fresh instance reopens itself.
+    keepOpenFlagRead.running = true
+  }
+
+  // Mark the panel to reopen after the bar rebuild that this action is
+  // about to trigger. Call before any registry write from panel UI.
+  // The flag lives in a state file: instance properties cannot survive the
+  // rebuild, and the shell object rejects dynamic properties.
+  function keepOpenAcrossRebuild() {
+    keepOpenFlagWrite.command = ["bash", "-c",
+      "mkdir -p \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy\" && printf '%s' \"$1\" > \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"",
+      "omaplug", root.layoutPageOpen ? "layout" : "main"]
+    keepOpenFlagWrite.running = true
+  }
+
+  // State-file flag backing keepOpenAcrossRebuild. Two one-shot Processes
+  // (write before the action, consume on fresh load) because plain file IO
+  // from QML JS is intentionally unavailable in Quickshell.
+  Process {
+    id: keepOpenFlagWrite
+  }
+
+  Process {
+    id: keepOpenFlagRead
+    command: ["bash", "-c", "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"; if [ -f \"$f\" ]; then cat \"$f\"; rm -f \"$f\"; exit 0; else exit 1; fi"]
+    stdout: StdioCollector { id: keepOpenState; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        keepOpenRetries = 0
+        var restoreLayout = String(keepOpenState.text).trim() === "layout"
+        Qt.callLater(function() {
+          root.open()
+          root.layoutPageOpen = restoreLayout
+        })
+      } else if (keepOpenRetries < 4) {
+        // The flag write races the rebuild: the fresh instance can load
+        // before the touch lands. Retry briefly before giving up.
+        keepOpenRetries++
+        keepOpenRetry.restart()
+      }
+    }
+  }
+
+  property int keepOpenRetries: 0
+
+  Timer {
+    id: keepOpenRetry
+    interval: 150
+    repeat: false
+    onTriggered: {
+      if (!keepOpenFlagRead.running) keepOpenFlagRead.running = true
+    }
   }
 
   // ------------------------------------------------------------- open / close
@@ -1408,6 +1728,7 @@ Panel {
     refreshPlugins()
     // Pick up verification changes while retaining cached badges during the fetch.
     fetchMarketplace()
+    root.refreshBarLayout()
     root.controller.show()
     Qt.callLater(function() {
       if (root.opened) root.primeFocus()
@@ -1417,6 +1738,7 @@ Panel {
   function close() {
     root.installDialogOpen = false
     root.updatesPageOpen = false
+    root.layoutPageOpen = false
     root.removeConfirmOpen = false
     root.restartConfirmOpen = false
     root.removeSelectMode = false
@@ -1429,6 +1751,7 @@ Panel {
     if (root.opened) root.close()
     else root.open()
   }
+
 
   function switchPanel(direction) {
     if (root.bar && typeof root.bar.switchPanelFrom === "function")
@@ -1570,6 +1893,13 @@ Panel {
       anchors.fill: parent
       clip: true
       anchors.topMargin: appHeader.height
+      // The updates page (z: 5000, below) is a full overlay, not a child of
+      // this Item, so painting/input here would otherwise carry on
+      // underneath it - visible through any transparency in panelBackground,
+      // and still clickable through any gap the overlay's own MouseArea
+      // misses. Hiding this Item outright while that page is open removes
+      // both problems at the source instead of only blocking clicks.
+      visible: !root.updatesPageOpen
 
       MouseArea {
         anchors.fill: parent
@@ -1606,10 +1936,17 @@ Panel {
 
           Button {
             iconText: "\uf021"
-            tooltipText: "Check updates"
+            tooltipText: root.checkingUpdates ? "Checking for updates…" : "Check updates"
             enabled: !root.checkingUpdates && !root.updateDetachedRunning
-            foreground: root.contentForeground
+            foreground: root.checkingUpdates
+              ? Color.muted
+              : root.contentForeground
             accent: Color.accent
+            iconSpinning: root.checkingUpdates
+            // Keep the glyph's visual center stable while it spins and make
+            // the disabled state unmistakable against bright themes.
+            iconSize: Style.font.body
+            opacity: root.checkingUpdates ? 0.65 : 1
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -1621,7 +1958,19 @@ Panel {
           }
 
           Button {
-            iconText: "\uf0ed"
+            iconText: "\uebf6"
+            tooltipText: "Arrange bar layout"
+            foreground: root.contentForeground
+            accent: Color.accent
+            fontFamily: root.contentFontFamily
+            fontSize: Style.font.bodySmall
+            horizontalPadding: Style.space(10)
+            verticalPadding: Style.space(5)
+            onClicked: root.layoutPageOpen = true
+          }
+
+          Button {
+            iconText: ""
             tooltipText: "Install plugin"
             foreground: root.contentForeground
             accent: Color.accent
@@ -1760,14 +2109,20 @@ Panel {
 
           spacing: Style.space(8)
           Layout.maximumHeight: implicitHeight
-          visible: root.updateSummary !== "" || root.removeSummary !== ""
+          visible: root.checkingUpdates || root.updateSummary !== ""
+            || root.removeSummary !== ""
+            || root.moveSummary !== ""
             || (root.removeSelectMode && root.selectedRemoveCount > 0)
 
           Label {
-            visible: root.updateSummary !== ""
-            text: root.updateSummary
+            visible: root.checkingUpdates || root.updateSummary !== ""
+            text: root.checkingUpdates
+              ? "Checking plugin updates…"
+              : root.updateSummary
             textFormat: Text.PlainText
-            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            color: root.checkingUpdates
+              ? Qt.darker(root.contentForeground, 1.5)
+              : Style.selectedStateColor(root.contentForeground, Color.accent)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -1775,6 +2130,15 @@ Panel {
           Label {
             visible: root.removeSummary !== ""
             text: root.removeSummary
+            textFormat: Text.PlainText
+            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.bodySmall
+          }
+
+          Label {
+            visible: root.moveSummary !== ""
+            text: root.moveSummary
             textFormat: Text.PlainText
             color: Style.selectedStateColor(root.contentForeground, Color.accent)
             font.family: root.contentFontFamily
@@ -1822,12 +2186,34 @@ Panel {
       summary: root.updateSummary
       iconFor: root.iconFor
       whatsNewUrlFor: root.whatsNewUrlFor
+      autoCheckEnabled: root.autoCheckEnabled
+      autoCheckIntervalHours: root.autoCheckIntervalHours
 
       onCloseRequested: root.updatesPageOpen = false
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onOpenUrlRequested: function(url) { root.openExternal(url) }
       onUpdatePluginRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onUpdateAllRequested: root.updateAll()
+      onAutoCheckEnabledRequested: function(value) { root.setAutoCheckEnabled(value) }
+      onAutoCheckIntervalRequested: function(hours) { root.setAutoCheckIntervalHours(hours) }
+    }
+
+    Arrange.Page {
+      id: layoutPage
+      anchors.fill: parent
+      anchors.topMargin: appHeader.height
+      z: 5000
+
+      open: root.layoutPageOpen
+      sections: root.barLayoutSections
+      foreground: root.contentForeground
+      fontFamily: root.contentFontFamily
+      panelBackground: root.panelBackground
+
+      onCloseRequested: root.layoutPageOpen = false
+      onDropRequested: function(pluginId, section, index) {
+        root.moveWidgetToPosition(pluginId, section, index)
+      }
     }
 
 
@@ -1850,6 +2236,8 @@ Panel {
       foreground: root.contentForeground
       fontFamily: root.contentFontFamily
       panelBackground: root.panelBackground
+      canMove: rowMenuOverlay.plugin ? root.canMoveWidget(rowMenuOverlay.plugin.id) : false
+      currentSection: rowMenuOverlay.plugin ? root.barSectionFor(rowMenuOverlay.plugin.id) : ""
 
       onCloseRequested: root.closeRowMenu()
       onEnabledChangeRequested: function(pluginId, enabled) {
@@ -1858,6 +2246,7 @@ Panel {
       onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
       onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onRemovalRequested: function(pluginId) { root.removePlugin(pluginId) }
+      onMoveRequested: function(pluginId, section) { root.moveWidgetToSection(pluginId, section) }
     }
 
     Dialogs.Confirm {

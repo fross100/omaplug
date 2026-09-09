@@ -22,6 +22,7 @@ assert_contains 'page.verificationText(updateRow.modelData.id, updateRow.modelDa
 assert_contains 'marketplaceMap: root.marketplaceMap' "$PANEL"
 assert_contains 'marketplaceFetching: root.marketplaceFetching' "$PANEL"
 assert_contains 'marketplaceFetchFailed: root.marketplaceFetchFailed' "$PANEL"
-assert_contains '"--max-filesize", "8388608"' "$PANEL"
+assert_contains 'marketplaceProcess.command = [root.marketplaceHelperPath]' "$PANEL"
+assert_contains '--max-filesize 16777216' "$ROOT/marketplace-catalog.sh"
 
 printf 'verification-status-test: ok\n'

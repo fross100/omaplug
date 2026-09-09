@@ -19,12 +19,15 @@ Rectangle {
   required property color foreground
   required property string fontFamily
   required property color panelBackground
+  property bool canMove: false
+  property string currentSection: ""
 
   signal closeRequested
   signal enabledChangeRequested(string pluginId, bool enabled)
   signal sourceRequested(string sourceKey)
   signal updateRequested(string sourceKey)
   signal removalRequested(string pluginId)
+  signal moveRequested(string pluginId, string section)
 
   visible: open
   color: "transparent"
@@ -108,6 +111,36 @@ Rectangle {
         onClicked: {
           menu.updateRequested(menu.plugin.sourceKey)
           menu.closeRequested()
+        }
+      }
+
+      // Bar-widget placement. Only visible for widgets currently on the bar;
+      // the widget's own section is marked and disabled so the menu shows
+      // where the widget lives now.
+      Repeater {
+        model: menu.canMove ? ["left", "center", "right"] : []
+
+        Button {
+          required property string modelData
+
+          readonly property bool isCurrent: menu.currentSection === modelData
+
+          visible: menu.canMove
+          text: (isCurrent ? "● " : "") + "Move to " + modelData
+          enabled: !isCurrent
+          opacity: isCurrent ? 0.55 : 1.0
+          foreground: menu.foreground
+          accent: Color.accent
+          fontFamily: menu.fontFamily
+          fontSize: Style.font.bodySmall
+          horizontalPadding: Style.space(8)
+          verticalPadding: Style.space(5)
+          Layout.fillWidth: true
+          Layout.alignment: Qt.AlignLeft
+          onClicked: {
+            menu.moveRequested(menu.plugin.id, modelData)
+            menu.closeRequested()
+          }
         }
       }
 
