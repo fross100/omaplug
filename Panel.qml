@@ -1514,7 +1514,11 @@ Panel {
       if (row.id === id && value === false && row.canDisable === false) return
     }
     root.keepOpenAcrossRebuild()
-    root.pluginToggleProcess.command = ["omarchy", "plugin", value ? "enable" : "disable", id]
+    var nested = root.nestedWidgetIds[String(id)] === true
+    var helper = String(Qt.resolvedUrl("nested-widget-toggle.sh")).replace(/^file:\/\//, "")
+    root.pluginToggleProcess.command = !value && nested
+      ? ["setsid", "-f", helper, id, "disable"]
+      : ["omarchy", "plugin", value ? "enable" : "disable", id]
     root.pluginToggleProcess.running = true
   }
 
