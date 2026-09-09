@@ -33,7 +33,17 @@ Rectangle {
 
   property bool _stayLoaded: false
   onOpenChanged: {
-    if (open) _stayLoaded = true
+    if (open) {
+      _stayLoaded = true
+      // Never inherit a stale drag/selection look from a previous visit:
+      // the board always opens in a clean, unselected state.
+      cancelDrag()
+    }
+  }
+
+  focus: true
+  Keys.onEscapePressed: {
+    if (board.dragId !== "") board.cancelDrag()
   }
 
   // Active drag state, shared across the three columns.
@@ -184,6 +194,11 @@ Rectangle {
               clip: true
               spacing: Style.space(4)
               model: column.entries
+              // The board manages its own drop markers; never show the
+              // view's own current-item highlight or keep a selection.
+              currentIndex: -1
+              highlight: null
+              keyNavigationEnabled: false
 
               Component.onCompleted: board.registerList(column.section, sectionList)
 
