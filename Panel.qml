@@ -1536,8 +1536,7 @@ Panel {
     // A toggle/move/remove rewrites shell.json, and the bar rebuilds every
     // widget on every monitor in response — including this panel's own
     // Loader, which destroys the open instance. Consume a pending reopen
-    // flag (state file) so the fresh instance reopens itself.
-    keepOpenFlagRead.running = true
+    // flag (state file) so the fresh instance reopens itself.    keepOpenFlagRead.running = true
   }
 
   // Mark the panel to reopen after the bar rebuild that this action is
