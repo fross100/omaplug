@@ -72,6 +72,7 @@ Panel {
   property bool marketplaceFetching: false
   property bool marketplaceFetchFailed: false
   property string marketplaceFetchedAt: ""
+  property string marketplaceHelperPath: ""
 
   // Local HEAD commit for every git-managed plugin dir, keyed by folder name.
   // Filled alongside the repo remote scan so rows can compare the installed
@@ -823,11 +824,10 @@ Panel {
   // Fetches the public marketplace catalog (capped at 2 MB like every other
   // retained output) and builds the id -> {verified} map.
   function fetchMarketplace() {
-    if (root.marketplaceFetching) return
+    if (root.marketplaceFetching || root.marketplaceHelperPath === "") return
     root.marketplaceFetching = true
     root.marketplaceFetchFailed = false
-    marketplaceProcess.command = ["curl", "-fsSL", "--max-time", "20", "--max-filesize", "8388608",
-      "https://plugins.omarchy.org/catalog.json"]
+    marketplaceProcess.command = [root.marketplaceHelperPath]
     marketplaceProcess.running = true
   }
 
@@ -837,7 +837,9 @@ Panel {
     var map = {}
     try {
       var catalog = JSON.parse(String(text || "{}"))
-      var plugins = catalog.plugins || []
+      if (!catalog || typeof catalog !== "object" || !Array.isArray(catalog.plugins))
+        throw new Error("catalog.plugins is not an array")
+      var plugins = catalog.plugins
       for (var i = 0; i < plugins.length; i++) {
         var entry = plugins[i]
         if (!entry || typeof entry.id !== "string" || !entry.id) continue
@@ -1395,6 +1397,7 @@ Panel {
 
   Component.onCompleted: {
     console.log("Panel.qml loaded, filterMode=", root.filterMode, "rows=", root.pluginRows.length)
+    root.marketplaceHelperPath = String(Qt.resolvedUrl("marketplace-catalog.sh")).replace(/^file:\/\//, "")
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
