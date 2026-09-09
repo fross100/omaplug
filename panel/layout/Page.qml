@@ -284,6 +284,11 @@ Rectangle {
                       dragging = false
                     }
                     onPositionChanged: function(mouse) {
+                      // Ignore pure hover: a drag starts only while the left
+                      // button is held. Without this gate, the first hover
+                      // motion trips the threshold (pressX/pressY start at 0)
+                      // and a phantom drag follows the cursor uninvited.
+                      if (!(mouse.buttons & Qt.LeftButton)) return
                       if (!dragging
                         && (Math.abs(mouse.x - pressX) > 6 || Math.abs(mouse.y - pressY) > 6)) {
                         dragging = true
