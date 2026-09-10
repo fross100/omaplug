@@ -133,10 +133,13 @@ Item {
         Layout.alignment: Qt.AlignVCenter
         spacing: Style.space(2)
 
-        RowLayout {
+        Item {
           id: nameRow
           Layout.fillWidth: true
-          spacing: Style.space(8)
+          implicitHeight: Math.max(nameLabel.implicitHeight,
+            verificationBadge.visible ? verificationBadge.implicitHeight : 0,
+            versionLabel.visible ? versionLabel.implicitHeight : 0)
+          readonly property real spacing: Style.space(8)
 
           Label {
             id: nameLabel
@@ -148,10 +151,11 @@ Item {
             font.bold: true
             // Keep short names adjacent to their metadata. Long names use
             // only the space left after the badge/version, then elide.
-            Layout.fillWidth: true
-            Layout.preferredWidth: implicitWidth
-            Layout.maximumWidth: implicitWidth
-            Layout.minimumWidth: 0
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, Math.max(0, nameRow.width
+              - (verificationBadge.visible ? verificationBadge.implicitWidth + nameRow.spacing : 0)
+              - (versionLabel.visible ? versionLabel.implicitWidth + nameRow.spacing : 0)))
             elide: Label.ElideRight
 
             // Full name only when elided · matches author/ListingLinks ToolTip style.
@@ -167,6 +171,9 @@ Item {
           Rectangle {
             id: verificationBadge
             visible: pluginRow.listed
+            anchors.left: nameLabel.right
+            anchors.leftMargin: nameRow.spacing
+            anchors.verticalCenter: parent.verticalCenter
             radius: height / 2
             implicitWidth: badgeContent.implicitWidth + Style.space(10)
             implicitHeight: Style.space(16)
@@ -217,6 +224,9 @@ Item {
           Label {
             id: versionLabel
             visible: pluginRow.modelData.version !== "unknown"
+            anchors.left: verificationBadge.visible ? verificationBadge.right : nameLabel.right
+            anchors.leftMargin: nameRow.spacing
+            anchors.verticalCenter: parent.verticalCenter
             text: "v" + pluginRow.modelData.version
             textFormat: Text.PlainText
             color: Qt.darker(pluginRow.foreground, 2.0)
@@ -224,11 +234,6 @@ Item {
             font.pixelSize: Style.font.caption
           }
 
-          Item {
-            Layout.fillWidth: true
-            Layout.preferredWidth: 0
-            Layout.minimumWidth: 0
-          }
         }
 
         Label {
