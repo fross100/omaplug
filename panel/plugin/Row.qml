@@ -124,30 +124,56 @@ Item {
       }
 
       ColumnLayout {
+        // preferredWidth 0 + fillWidth: take leftover row space instead of the
+        // description's single-line implicitWidth (otherwise Wrap/Elide never
+        // bind and card.clip cuts mid-word with no ellipsis).
         Layout.fillWidth: true
+        Layout.preferredWidth: 0
+        Layout.minimumWidth: 0
         Layout.alignment: Qt.AlignVCenter
         spacing: Style.space(2)
 
-        RowLayout {
+        Item {
+          id: nameRow
           Layout.fillWidth: true
-          spacing: Style.space(8)
+          implicitHeight: Math.max(nameLabel.implicitHeight,
+            verificationBadge.visible ? verificationBadge.implicitHeight : 0,
+            versionLabel.visible ? versionLabel.implicitHeight : 0)
+          readonly property real spacing: Style.space(8)
 
           Label {
+            id: nameLabel
             text: pluginRow.modelData.name
             textFormat: Text.PlainText
             color: pluginRow.foreground
             font.family: pluginRow.fontFamily
             font.pixelSize: Style.font.body
             font.bold: true
-            // Keep the badge and version adjacent to the name while still
-            // letting long names shrink and elide instead of displacing the
-            // action column (#4).
-            Layout.minimumWidth: 0
+            // Keep short names adjacent to their metadata. Long names use
+            // only the space left after the badge/version, then elide.
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            width: Math.min(implicitWidth, Math.max(0, nameRow.width
+              - (verificationBadge.visible ? verificationBadge.implicitWidth + nameRow.spacing : 0)
+              - (versionLabel.visible ? versionLabel.implicitWidth + nameRow.spacing : 0)))
             elide: Label.ElideRight
+
+            // Full name only when elided · matches author/ListingLinks ToolTip style.
+            ToolTip.text: truncated ? text : ""
+            ToolTip.visible: nameHover.hovered && truncated
+            ToolTip.delay: 400
+
+            HoverHandler {
+              id: nameHover
+            }
           }
 
           Rectangle {
+            id: verificationBadge
             visible: pluginRow.listed
+            anchors.left: nameLabel.right
+            anchors.leftMargin: nameRow.spacing
+            anchors.verticalCenter: parent.verticalCenter
             radius: height / 2
             implicitWidth: badgeContent.implicitWidth + Style.space(10)
             implicitHeight: Style.space(16)
@@ -196,26 +222,41 @@ Item {
           }
 
           Label {
+            id: versionLabel
             visible: pluginRow.modelData.version !== "unknown"
+            anchors.left: verificationBadge.visible ? verificationBadge.right : nameLabel.right
+            anchors.leftMargin: nameRow.spacing
+            anchors.verticalCenter: parent.verticalCenter
             text: "v" + pluginRow.modelData.version
             textFormat: Text.PlainText
             color: Qt.darker(pluginRow.foreground, 2.0)
             font.family: pluginRow.fontFamily
             font.pixelSize: Style.font.caption
           }
+
         }
 
         Label {
+          id: descriptionLabel
           text: pluginRow.modelData.description !== "" ? pluginRow.modelData.description : "No description"
           textFormat: Text.PlainText
           color: Qt.darker(pluginRow.foreground, 1.6)
           font.family: pluginRow.fontFamily
           font.pixelSize: Style.font.bodySmall
           Layout.fillWidth: true
+          Layout.preferredWidth: 0
           Layout.minimumWidth: 0
           wrapMode: Label.Wrap
           maximumLineCount: 2
           elide: Label.ElideRight
+
+          ToolTip.text: truncated ? text : ""
+          ToolTip.visible: descriptionHover.hovered && truncated
+          ToolTip.delay: 400
+
+          HoverHandler {
+            id: descriptionHover
+          }
         }
 
         RowLayout {
