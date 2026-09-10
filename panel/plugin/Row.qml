@@ -148,10 +148,9 @@ Item {
             font.bold: true
             // Keep short names adjacent to their metadata. Long names use
             // only the space left after the badge/version, then elide.
-            Layout.fillWidth: false
-            Layout.preferredWidth: Math.min(nameLabel.implicitWidth,
-              Math.max(0, nameRow.width - verificationBadge.implicitWidth
-                - versionLabel.implicitWidth - nameRow.spacing * 2))
+            Layout.fillWidth: true
+            Layout.preferredWidth: implicitWidth
+            Layout.maximumWidth: implicitWidth
             Layout.minimumWidth: 0
             elide: Label.ElideRight
 
@@ -223,6 +222,12 @@ Item {
             color: Qt.darker(pluginRow.foreground, 2.0)
             font.family: pluginRow.fontFamily
             font.pixelSize: Style.font.caption
+          }
+
+          Item {
+            Layout.fillWidth: true
+            Layout.preferredWidth: 0
+            Layout.minimumWidth: 0
           }
         }
 
