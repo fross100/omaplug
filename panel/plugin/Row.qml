@@ -134,6 +134,7 @@ Item {
         spacing: Style.space(2)
 
         RowLayout {
+          id: nameRow
           Layout.fillWidth: true
           spacing: Style.space(8)
 
@@ -148,8 +149,13 @@ Item {
             // Keep the badge and version adjacent to the name while still
             // letting long names shrink and elide instead of displacing the
             // action column (#4).
-            Layout.fillWidth: true
-            Layout.preferredWidth: 0
+            // Reserve space for the verification badge and version so the
+            // name elides without separating those metadata chips from it.
+            Layout.fillWidth: false
+            Layout.preferredWidth: Math.max(0, nameRow.width
+              - verificationBadge.implicitWidth - versionLabel.implicitWidth
+              - nameRow.spacing * 2)
+            Layout.maximumWidth: Layout.preferredWidth
             Layout.minimumWidth: 0
             elide: Label.ElideRight
 
@@ -164,6 +170,7 @@ Item {
           }
 
           Rectangle {
+            id: verificationBadge
             visible: pluginRow.listed
             radius: height / 2
             implicitWidth: badgeContent.implicitWidth + Style.space(10)
@@ -213,6 +220,7 @@ Item {
           }
 
           Label {
+            id: versionLabel
             visible: pluginRow.modelData.version !== "unknown"
             text: "v" + pluginRow.modelData.version
             textFormat: Text.PlainText
