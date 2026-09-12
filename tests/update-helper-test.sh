@@ -100,9 +100,10 @@ assert_line 'plugin update fail --yes' "$LOG"
 "$ROOT/update-helper.sh" "$STATUS" job-first slow &
 first_pid=$!
 for _ in {1..100}; do
-  [[ -d $STATUS.lock ]] && break
+  [[ -f $STATUS.flock ]] && break
   sleep 0.01
 done
+sleep 0.05
 if "$ROOT/update-helper.sh" "$STATUS" job-second good; then
   printf 'FAIL: a concurrent update runner acquired the same lock\n' >&2
   exit 1

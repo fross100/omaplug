@@ -12,40 +12,20 @@
 set -uo pipefail
 umask 077
 
-STATUS="${1:-}"
-[[ -n $STATUS ]] || exit 2
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [[ ${1:-} != --run ]]; then
+  exec python3 "$SCRIPT_DIR/runtime-state.py" update "$@"
+fi
 shift
 JOB_ID="${1:-}"
 [[ $JOB_ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || exit 2
 shift
 (( $# > 0 )) || exit 2
 
-PLUGINS_DIR="$HOME/.config/omarchy/plugins"
-
-mkdir -p -- "$(dirname -- "$STATUS")"
-LOCK="${STATUS}.lock"
-
-acquire_lock() {
-  if mkdir -- "$LOCK" 2>/dev/null; then
-    return 0
-  fi
-
-  local old_pid=""
-  [[ -r $LOCK/pid ]] && read -r old_pid < "$LOCK/pid"
-  if [[ $old_pid =~ ^[0-9]+$ ]] && kill -0 "$old_pid" 2>/dev/null; then
-    return 1
-  fi
-
-  rm -rf -- "$LOCK"
-  mkdir -- "$LOCK" 2>/dev/null
-}
-
-acquire_lock || exit 3
-printf '%s\n' "$$" > "$LOCK/pid"
-trap 'rm -rf -- "$LOCK"' EXIT
+PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins"
 
 write_status() {
-  printf '%s\n' "$1" >> "$STATUS"
+  printf '%s\n' "$1"
 }
 
 one_line() {
@@ -79,8 +59,6 @@ preflight_error() {
   fi
 }
 
-: > "$STATUS"
-chmod 600 -- "$STATUS" || exit 2
 write_status $'version\t1'
 write_status $'job\t'"$JOB_ID"
 write_status $'pid\t'"$$"
@@ -92,7 +70,7 @@ failed=0
 
 for id in "$@"; do
   if [[ ! $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || $id == *..* ]]; then
-    write_status $'failed\t'"$id"$'\tinvalid plugin id'
+    write_status $'failed\t'"$(one_line "$id")"$'\tinvalid plugin id'
     failed=$((failed + 1))
     continue
   fi
@@ -104,7 +82,7 @@ for id in "$@"; do
   fi
 
   write_status $'start\t'"$id"
-  out=$(omarchy plugin update "$id" --yes 2>&1)
+  out=$(timeout -k 2 120 omarchy plugin update "$id" --yes 2>&1 | { head -c 8000; cat >/dev/null; }; exit "${PIPESTATUS[0]}")
   rc=$?
   detail=$(one_line "$out")
 

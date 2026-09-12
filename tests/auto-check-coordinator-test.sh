@@ -9,6 +9,7 @@ trap 'rm -rf -- "$TMP"' EXIT
 SCRIPTDIR="$TMP/scriptdir"
 mkdir -p -- "$SCRIPTDIR"
 cp -- "$ROOT/auto-check-coordinator.sh" "$SCRIPTDIR/"
+cp -- "$ROOT/runtime-state.py" "$SCRIPTDIR/"
 chmod +x "$SCRIPTDIR/auto-check-coordinator.sh"
 
 CALLS="$TMP/calls.log"
@@ -66,9 +67,8 @@ done
 # Panel.qml's checkWatchdog SIGKILLing a coordinator mid-run, which skips
 # any EXIT trap) must not wedge every future auto-check.
 : > "$CALLS"
-LOCK="$XDG_RUNTIME_DIR/omaplug/auto-check.lock"
-mkdir -p -- "$LOCK"
-printf '999999\n' > "$LOCK/pid"
+LOCK="$XDG_RUNTIME_DIR/omaplug/auto-check.flock"
+printf 'stale\n' > "$LOCK"
 
 OUT=$("$SCRIPTDIR/auto-check-coordinator.sh" "$PLUGINS_DIR")
 if [[ $OUT != "$EXPECTED" ]]; then
@@ -80,9 +80,7 @@ fi
   printf 'FAIL: stale-lock recovery did not actually run plugin-state.sh\n' >&2
   exit 1
 }
-[[ -d $LOCK ]] && {
-  printf 'FAIL: lock directory left behind after a successful run\n' >&2
-  exit 1
-}
+# The flock inode is intentionally retained; the kernel releases ownership
+# when the process exits, avoiding stale-PID deletion races.
 
 printf 'auto-check-coordinator-test: ok\n'

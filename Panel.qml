@@ -233,6 +233,7 @@ Panel {
   // panel reconnects to the same job via this runtime status file.
   property string updateHelperPath: ""
   property string updateRunnerPath: ""
+  readonly property string runtimeStatePath: String(Qt.resolvedUrl("runtime-state.py")).replace(/^file:\/\//, "")
   // Wraps plugin-state.sh with a lock+cache so the omaplug instance on each
   // monitor's bar doesn't independently re-fetch every plugin's remote when
   // the background timer (not a user click) is what triggered the check.
@@ -241,7 +242,7 @@ Panel {
     var runtime = Quickshell.env("XDG_RUNTIME_DIR")
     return runtime && runtime !== ""
       ? runtime + "/omaplug"
-      : Quickshell.env("HOME") + "/.cache/omaplug"
+      : (Quickshell.env("XDG_CACHE_HOME") || Quickshell.env("HOME") + "/.cache") + "/omaplug"
   }
   readonly property string updateStatusPath: root.updateStateRoot + "/update.status"
   readonly property int completedUpdateJobMaxAgeSeconds: 300
@@ -255,6 +256,7 @@ Panel {
   // Streaming parse state for per-plugin progress.
   property string updateCheckLineBuf: ""
   property int updateCheckProcessed: 0
+  property var updateCheckSeen: ({})
 
   property bool installDialogOpen: false
   property bool installRunning: false
@@ -304,13 +306,13 @@ Panel {
   }
 
   property Timer checkWatchdog: Timer {
-    interval: 45000
+    interval: 60000
     repeat: false
     onTriggered: {
       console.log("checkWatchdog timeout, process running=", root.updateCheckProcess.running)
       if (!root.checkingUpdates) return
       if (root.updateCheckProcess.running)
-        root.updateCheckProcess.signal(9)
+        root.updateCheckProcess.signal(15)
       root.checkingUpdates = false
       root.updateSummary = "Check timed out — a repository may be unreachable"
     }
@@ -589,7 +591,7 @@ Panel {
   // folder name) so each row can offer a repo link and compare its installed
   // code against the marketplace listing snapshot.
   function scanPluginRepos() {
-    var dir = Quickshell.env("HOME") + "/.config/omarchy/plugins"
+    var dir = (Quickshell.env("XDG_CONFIG_HOME") || Quickshell.env("HOME") + "/.config") + "/omarchy/plugins"
     if (root.reposScanning) return
     root.reposScanning = true
     var script = ""
@@ -675,8 +677,11 @@ Panel {
     // ever shows its last known state or a newer one, never a gap.
     root.updateCheckLineBuf = ""
     root.updateCheckProcessed = 0
+    root.updateCheckSeen = {}
     root.checkWatchdog.restart()
-    updateCheckProcess.command = [helper, dir]
+    updateCheckProcess.command = helper === root.autoCheckCoordinatorPath
+      ? ["bash", helper, dir]
+      : ["python3", root.runtimeStatePath, "check-manual", dir]
     updateCheckProcess.running = true
   }
 
@@ -706,6 +711,7 @@ Panel {
     var state = parts[0]
     var key = parts[1]
     if (["CHECK", "CURRENT", "UPDATE", "LOCAL_CHANGES", "LOCAL", "ERROR"].indexOf(state) < 0 || key === "") return
+    root.updateCheckSeen[key] = true
     var st = {}
     for (var k in root.updateStates) st[k] = root.updateStates[k]
     st[key] = state
@@ -726,6 +732,7 @@ Panel {
   // flip as the fetch for each plugin completes.
   function applyUpdateCheckData(text) {
     var all = String(text || "")
+    if (root.checkingUpdates) root.checkWatchdog.restart()
     var fresh = all.substring(root.updateCheckProcessed)
     root.updateCheckProcessed = all.length
     root.updateCheckLineBuf += fresh
@@ -751,7 +758,7 @@ Panel {
     for (var oldKey in root.updateStates) states[oldKey] = root.updateStates[oldKey]
     for (var i = 0; i < root.updateCheckRows.length; i++) {
       var sourceKey = root.updateCheckRows[i].sourceKey
-      if (!states[sourceKey] || states[sourceKey] === "CHECK") states[sourceKey] = "ERROR"
+      if (!root.updateCheckSeen[sourceKey] || !states[sourceKey] || states[sourceKey] === "CHECK") states[sourceKey] = "ERROR"
     }
     root.updateStates = states
     var updates = 0
@@ -821,7 +828,7 @@ Panel {
 
   function applyUpdateJobStatus() {
     var text = ""
-    try { text = updateStatusFile.text() } catch (e) { return }
+    try { text = updateStatusStdout.text } catch (e) { return }
     if (String(text || "").trim() === "") return
 
     var lines = String(text).split("\n")
@@ -1074,13 +1081,14 @@ Panel {
     }
   }
 
-  FileView {
+  Process {
     id: updateStatusFile
-    path: root.updateStatusPath
-    watchChanges: true
-    printErrors: false
-    onLoaded: root.applyUpdateJobStatus()
-    onFileChanged: updateStatusFile.reload()
+    command: ["python3", root.runtimeStatePath, "read", "update.status"]
+    function reload() { if (!running) running = true }
+    stdout: StdioCollector { id: updateStatusStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.applyUpdateJobStatus()
+    }
   }
 
   Timer {
@@ -1223,78 +1231,24 @@ Panel {
     root.startDetachedInstall(url)
   }
 
-  // Launch the detached helper. `omarchy plugin add` reloads plugins when it
-  // finishes, which unloads this panel; the helper is started with
-  // setsid/nohup so it survives and finishes the installation itself.
-  // The status file is created securely via mktemp to avoid predictable /tmp
-  // symlink races (the helper truncates it, so creation must be exclusive).
-  property string _installPendingUrl: ""
-  property Process installStatusMktmpProcess: Process {
-    stdout: StdioCollector {
-      id: installMktmpStdout
-      waitForEnd: true
-    }
-    onExited: function(exitCode) {
-      if (exitCode !== 0) {
-        root.installWatchdog.stop()
-        root.installDetachedRunning = false
-        root.installRunning = false
-        root.installFailed = true
-        root.installResult = "Could not create secure status file"
-        return
-      }
-      var p = String(installMktmpStdout.text || "").trim()
-      if (p === "" || p.indexOf("/") !== 0) {
-        root.installWatchdog.stop()
-        root.installDetachedRunning = false
-        root.installRunning = false
-        root.installFailed = true
-        root.installResult = "Could not create secure status file"
-        return
-      }
-      root.installStatusPath = p
-      installStatusFile.path = p
-      // Directly run omarchy plugin add in a detached shell; no helper script.
-      // The plugin is installed but not enabled (user enables manually).
-      var launch = ["bash", "-c",
-        "setsid nohup bash -c '"
-        + "STATUS=\"$2\"; URL=\"$1\"; "
-        + "if [ -L \"$STATUS\" ]; then echo \"Refusing symlink\" >&2; exit 1; fi; "
-        + "umask 077; chmod 600 \"$STATUS\" 2>/dev/null || true; "
-        + "printf \"installing\\n\" >> \"$STATUS\"; "
-        + "TMP_OUT=$(mktemp); "
-        + "omarchy plugin add \"$URL\" --yes 2>&1 | { head -c 8000 >\"$TMP_OUT\"; cat >/dev/null; }; rc=${PIPESTATUS[0]}; "
-        + "out=$(cat \"$TMP_OUT\"); rm -f \"$TMP_OUT\"; "
-        // Reserve marker headroom below the 8192 ceiling: 11B header + 8001B
-        // output + <=105B id line + <=16B terminal markers always fit in the
-        // consumer's first-8192-char inspection window, so a chatty installer
-        // can never push install_failed/done out of view.
-        + "printf \"%.8000s\\n\" \"$out\" >> \"$STATUS\"; "
-        + "head -c 8192 \"$STATUS\" > \"$STATUS.tmp\" 2>/dev/null && mv \"$STATUS.tmp\" \"$STATUS\" 2>/dev/null || true; "
-        + "id=\"\"; "
-        + "if [ $rc -eq 0 ]; then id=$(printf \"%s\\n\" \"$out\" | sed -n \"s/.*Added \\([^ ]*\\) into.*/\\1/p\"); fi; "
-        + "id=${id:0:100}; "
-        + "if [ -n \"$id\" ]; then printf \"id=%s\\n\" \"$id\" >> \"$STATUS\"; fi; "
-        // done must ALWAYS be the last marker (including on failure): the
-        // consumer finalizes only on done, so a bare install_failed would
-        // leave the dialog stuck on "Installing…" forever.
-        + "if [ $rc -ne 0 ]; then printf \"install_failed\\n\" >> \"$STATUS\"; fi; "
-        + "printf \"done\\n\" >> \"$STATUS\"; "
-        + "if [ $rc -ne 0 ]; then exit 1; fi; "
-        + "' -- \"$0\" \"$1\" >/dev/null 2>&1 &",
-        root._installPendingUrl, p]
-      root.installLaunchProcess.command = launch
-      root.installLaunchProcess.running = true
-    }
-  }
+  // Structured status is separate from installer output and survives reloads.
+  property string installExpectedJobId: ""
 
   function startDetachedInstall(url) {
-    root._installPendingUrl = url
+    root.installExpectedJobId = Date.now().toString(36) + "-" + Math.floor(Math.random() * 0x1000000).toString(36)
     root.installDetachedRunning = true
     root.installResult = "Installing " + url + "…"
     root.installWatchdog.restart()
-    installStatusMktmpProcess.command = ["bash", "-c", 'umask 077; mktemp "${XDG_RUNTIME_DIR:-/tmp}/omaplug-install-XXXXXX.status" 2>/dev/null || mktemp /tmp/omaplug-install-XXXXXX.status']
-    installStatusMktmpProcess.running = true
+    try {
+      Quickshell.execDetached(["python3", root.runtimeStatePath, "install", url, root.installExpectedJobId])
+    } catch (e) {
+      root.installDetachedRunning = false
+      root.installRunning = false
+      root.installFailed = true
+      root.installResult = "Install could not start"
+      root.installWatchdog.stop()
+    }
+    installStatusFile.reload()
   }
 
   function cancelInstallConfirm() {
@@ -1302,73 +1256,44 @@ Panel {
     root.installConfirmOpen = false
   }
 
-  // Poll the detached helper's status file. The helper survives the plugin
-  // reload that `omarchy plugin add` triggers (which unloads this panel), so
-  // we watch its progress here and refresh when it finishes.
-  FileView {
+  Process {
     id: installStatusFile
-    path: root.installStatusPath
-    watchChanges: true
-    printErrors: false
-    onLoaded: root.onInstallStatusUpdate()
-    onFileChanged: root.onInstallStatusUpdate()
+    command: ["python3", root.runtimeStatePath, "read", "install.status"]
+    function reload() { if (!running) running = true }
+    stdout: StdioCollector { id: installStatusStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) root.onInstallStatusUpdate()
+    }
+  }
+
+  Timer {
+    interval: 1000
+    repeat: true
+    running: root.installDetachedRunning
+    onTriggered: installStatusFile.reload()
   }
 
   function onInstallStatusUpdate() {
-    if (!root.installDetachedRunning) return
-    if (root.installStatusPath === "") return
-    var text = ""
-    try { text = installStatusFile.text() } catch (e) { return }
-    if (text === "") return
-    // Enforce strict ceiling: remote output can be attacker-controlled.
-    // Truncate to 8192 bytes / 200 lines before allocation in long-lived shell.
-    if (text.length > 8192) {
-      text = text.substring(0, 8192)
-      // Mark as failed if truncated due to excessive output
-      if (text.indexOf("install_failed") === -1 && text.indexOf("done") === -1) {
-        root.installWatchdog.stop()
-        root.installDetachedRunning = false
-        root.installRunning = false
-        root.installFailed = true
-        root.installResult = "Install output too large"
-        root.installStatusPath = ""
-        return
-      }
-    }
-    var lines = String(text).split("\n")
-    if (lines.length > 200) lines = lines.slice(0, 200)
-    var id = ""
-    var done = false
-    var failed = false
-    var enabled = false
-    var installing = false
-    for (var i = 0; i < lines.length; i++) {
-      var line = lines[i].trim()
-      if (line.indexOf("id=") === 0) id = line.substring(3)
-      else if (line === "installing") installing = true
-      else if (line === "done") done = true
-      else if (line === "install_failed" || line === "enable_failed") failed = true
-      else if (line === "enabled") enabled = true
-      else if (line === "install_ok_no_id") { done = true; failed = true }
-    }
-    if (installing && !done) {
-      root.installRunning = true
+    var data
+    try { data = JSON.parse(String(installStatusStdout.text)) } catch (e) { return }
+    if (!data || typeof data.job !== "string"
+        || (root.installExpectedJobId !== "" && data.job !== root.installExpectedJobId)) return
+    if (root.installExpectedJobId === "" && data.running !== true
+        && (!data.finished || Date.now() / 1000 - data.finished > 300)) return
+    root.installExpectedJobId = data.job
+    root.installDetachedRunning = data.running === true
+    root.installRunning = root.installDetachedRunning
+    if (root.installRunning) {
       root.installResult = "Installing…"
+      if (!root.installWatchdog.running) root.installWatchdog.restart()
       return
     }
-    if (done) {
-      root.installWatchdog.stop()
-      root.installDetachedRunning = false
-      root.installRunning = false
-      root.installStatusPath = ""
-      if (failed) {
-        root.installFailed = true
-        root.installResult = "Install failed"
-      } else {
-        root.installResult = "Installed. Review the code, then enable it in the list."
-      }
-      root.refreshPlugins()
-    }
+    root.installWatchdog.stop()
+    root.installFailed = data.failed !== false
+    root.installResult = root.installFailed
+      ? "Install failed"
+      : "Installed. Review the code, then enable it in the list."
+    root.refreshPlugins()
   }
 
   function refreshPlugins() {
@@ -1442,7 +1367,7 @@ Panel {
       "for base in \"$0/shell/plugins\" \"$HOME/.config/omarchy/plugins\"; do "
       + "[ -d \"$base\" ] || continue; "
       + "firstParty=false; [[ \"$base\" == \"$0/shell/plugins\" ]] && firstParty=true; "
-      + "find \"$base\" -type f '(' -name manifest.json -o -name '*.manifest.json' ')' -print0 "
+      + "find -L \"$base\" -maxdepth 4 -type f '(' -name manifest.json -o -name '*.manifest.json' ')' -print0 "
       + "| while IFS= read -r -d '' file; do jq -c --argjson firstParty \"$firstParty\" "
       + "'{id,name,version,author,description,kinds,firstParty:$firstParty}' \"$file\"; done; "
       + "done",
@@ -1664,7 +1589,7 @@ Panel {
     root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
     fetchMarketplace()
-    Qt.callLater(function() { updateStatusFile.reload() })
+    Qt.callLater(function() { updateStatusFile.reload(); installStatusFile.reload() })
     // A toggle/move/remove rewrites shell.json, and the bar rebuilds every
     // widget on every monitor in response — including this panel's own
     // Loader, which destroys the open instance. Consume a pending reopen
@@ -1677,9 +1602,8 @@ Panel {
   // The flag lives in a state file: instance properties cannot survive the
   // rebuild, and the shell object rejects dynamic properties.
   function keepOpenAcrossRebuild() {
-    keepOpenFlagWrite.command = ["bash", "-c",
-      "mkdir -p \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy\" && printf '%s' \"$1\" > \"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"",
-      "omaplug", root.layoutPageOpen ? "layout" : "main"]
+    keepOpenFlagWrite.command = ["python3", root.runtimeStatePath, "reopen-write",
+      root.layoutPageOpen ? "layout" : "main"]
     keepOpenFlagWrite.running = true
   }
 
@@ -1692,7 +1616,7 @@ Panel {
 
   Process {
     id: keepOpenFlagRead
-    command: ["bash", "-c", "f=\"${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/omaplug-keep-open\"; if [ -f \"$f\" ]; then cat \"$f\"; rm -f \"$f\"; exit 0; else exit 1; fi"]
+    command: ["python3", root.runtimeStatePath, "reopen-read"]
     stdout: StdioCollector { id: keepOpenState; waitForEnd: true }
     onExited: function(exitCode) {
       if (exitCode === 0) {
