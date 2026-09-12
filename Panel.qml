@@ -1882,7 +1882,7 @@ Panel {
           }
 
           Button {
-            iconText: "\uebf6"
+            iconText: ""
             tooltipText: "Arrange bar layout"
             foreground: root.contentForeground
             accent: Color.accent
@@ -1894,7 +1894,7 @@ Panel {
           }
 
           Button {
-            iconText: ""
+            iconText: "󱓖"
             tooltipText: "Install plugin"
             foreground: root.contentForeground
             accent: Color.accent
