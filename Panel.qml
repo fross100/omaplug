@@ -32,12 +32,10 @@ Panel {
 
   property var pluginRows: []
 
-  // The shell injects the PluginRegistry into the bar's `shell` (the built-in
-  // Bar.qml exposes no `pluginRegistry` property itself), so resolve it there
-  // with a fallback for custom bars that do carry the registry directly.
-  readonly property var registry: root.bar && root.bar.shell
-    ? root.bar.shell.pluginRegistry
-    : (root.bar ? root.bar.pluginRegistry : null)
+  // Third-party plugins receive a scoped shell API and cannot inspect the
+  // host's live PluginRegistry. The public CLI is the supported listing API.
+  property bool listingPlugins: false
+  property int pluginListAttempts: 0
 
   // Git remote URLs for updatable plugins, keyed by sourceKey. Filled by a
   // background `git remote get-url` scan so each row can offer a repo link.
@@ -362,19 +360,17 @@ Panel {
   // Reads `git remote get-url origin` for every git-managed plugin dir and
   // fills pluginRepos (keyed by folder name) so each row can offer a repo link.
   function scanPluginRepos() {
-    var reg = root.registry
-    var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
-    if (!dir || root.reposScanning) return
+    if (root.reposScanning) return
     root.reposScanning = true
     var script = ""
-      + "dirs=\"$0\"\n"
+      + "dirs=\"$HOME/.config/omarchy/plugins\"\n"
       + "for d in \"$dirs\"/*/; do\n"
       + "  [ -d \"$d/.git\" ] || continue\n"
       + "  id=$(basename \"$d\")\n"
       + "  url=$(git -C \"$d\" remote get-url origin 2>/dev/null)\n"
       + "  [ -n \"$url\" ] && echo \"$id|$url\"\n"
       + "done"
-    repoScanProcess.command = ["bash", "-c", script, dir]
+    repoScanProcess.command = ["bash", "-c", script]
     repoScanProcess.running = true
   }
 
@@ -409,8 +405,7 @@ Panel {
   // show per-plugin progress while the fetch runs, then the result line.
   function checkUpdates() {
     console.log("checkUpdates start, checkingUpdates=", root.checkingUpdates, "updatingId=", root.updatingId)
-    var reg = root.registry
-    var dir = reg && reg.pluginsDir ? reg.pluginsDir : ""
+    var dir = "$HOME/.config/omarchy/plugins"
     console.log("pluginsDir=", dir)
     if (!dir || root.checkingUpdates || root.updatingId !== "") return
     root.checkingUpdates = true
@@ -419,7 +414,7 @@ Panel {
     root.updateCheckProcessed = 0
     root.checkWatchdog.restart()
     var script = ""
-      + "dirs=\"$0\"\n"
+      + "dirs=\"$HOME/.config/omarchy/plugins\"\n"
       + "for d in \"$dirs\"/*/; do\n"
       + "  [ -d \"$d/.git\" ] || continue\n"
       + "  id=$(basename \"$d\")\n"
@@ -433,7 +428,7 @@ Panel {
       + "    echo \"UPDATE|$id\"\n"
       + "  fi\n"
       + "done"
-    updateCheckProcess.command = ["bash", "-c", script, dir]
+    updateCheckProcess.command = ["bash", "-c", script]
     console.log("checkUpdates command set, running...")
     updateCheckProcess.running = true
     console.log("checkUpdates running=", updateCheckProcess.running, "pid=", updateCheckProcess.processId)
@@ -755,29 +750,47 @@ Panel {
   }
 
   function refreshPlugins() {
-    var reg = root.registry
-    if (!reg || !reg.installedPlugins) {
-      pluginRows = []
-      return
+    if (pluginListProcess.running) return
+    listingPlugins = true
+    var script = ""
+      + "catalog=$(omarchy plugin catalog) || exit $?\n"
+      + "listed=$(omarchy plugin list --json) || exit $?\n"
+      + "jq -cn --argjson catalog \"$catalog\" --argjson listed \"$listed\" '\n"
+      + "  $catalog | map(. as $plugin | (($listed | map(select(.id == $plugin.id)) | .[0]) // {}) as $state | $plugin + $state)\n"
+      + "'"
+    pluginListProcess.command = ["bash", "-c", script]
+    pluginListProcess.running = true
+  }
+
+  function applyPluginList(text) {
+    var plugins = []
+    try {
+      var parsed = JSON.parse(String(text || ""))
+      if (Array.isArray(parsed)) plugins = parsed
+    } catch (e) {
+      console.warn("omaplug: could not parse plugin list:", e)
     }
     var rows = []
-    var pdir = (reg.pluginsDir || "").replace(/\/+$/, "") + "/"
-    for (var id in reg.installedPlugins) {
-      var m = reg.installedPlugins[id]
+    for (var i = 0; i < plugins.length; i++) {
+      var m = plugins[i]
       if (!m || typeof m !== "object") continue
-      var sourceDir = String(m.__sourceDir || "")
+      var id = String(m.id || "")
+      if (id === "") continue
+      var firstParty = m.firstParty === true
+      var sourceDir = String(m.sourceDir || "")
       rows.push({
         id: id,
         name: m.name || id,
-        version: m.version || "unknown",
+        version: m.version || "",
         author: m.author || "",
         description: m.description || "",
         kinds: (m.kinds || []).join(", "),
-        enabled: reg.isEnabled(id) === true,
-        firstParty: m.__isFirstParty === true,
+        enabled: m.enabled === true,
+        firstParty: firstParty,
         sourceDir: sourceDir,
-        sourceKey: sourceDir.replace(/\/+$/, "").split("/").pop() || "",
-        updatable: sourceDir.indexOf(pdir) === 0
+        sourceKey: sourceDir.replace(/\/+$/, "").split("/").pop() || id,
+        updatable: !firstParty && sourceDir !== "",
+        canDisable: m.canDisable !== false
       })
     }
     rows.sort(function(a, b) {
@@ -791,19 +804,42 @@ Panel {
   }
 
   function setPluginEnabled(id, value) {
-    var reg = root.registry
-    if (!reg || typeof reg.setEnabled !== "function") return
-    reg.setEnabled(id, value)
+    pluginToggleProcess.command = ["omarchy", "plugin", value ? "enable" : "disable", id]
+    pluginToggleProcess.running = true
   }
 
-  function registryRevision() {
-    var reg = root.registry
-    return reg ? reg.registryRevision : 0
+  property Process pluginListProcess: Process {
+    onExited: function(exitCode) {
+      root.listingPlugins = false
+      if (exitCode === 0) {
+        root.pluginListAttempts = 0
+        root.applyPluginList(pluginListStdout.text)
+      } else if (root.pluginListAttempts < 3) {
+        // During shell startup the panel can load just before the IPC endpoint
+        // accepts requests. Retry briefly instead of presenting a blank list.
+        root.pluginListAttempts++
+        pluginListRetry.restart()
+      } else {
+        console.warn("omaplug: plugin list failed:", pluginListStderr.text)
+      }
+    }
+    stdout: StdioCollector { id: pluginListStdout; waitForEnd: true }
+    stderr: StdioCollector { id: pluginListStderr; waitForEnd: true }
   }
 
-  Connections {
-    target: root.registry
-    function onRegistryRevisionChanged() { root.refreshPlugins() }
+  Timer {
+    id: pluginListRetry
+    interval: 500
+    repeat: false
+    onTriggered: root.refreshPlugins()
+  }
+
+  property Process pluginToggleProcess: Process {
+    onExited: function(exitCode) {
+      if (exitCode !== 0) console.warn("omaplug: plugin toggle failed:", pluginToggleStderr.text)
+      Qt.callLater(root.refreshPlugins)
+    }
+    stderr: StdioCollector { id: pluginToggleStderr; waitForEnd: true }
   }
 
   Component.onCompleted: {
