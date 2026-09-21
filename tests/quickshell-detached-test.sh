@@ -37,6 +37,7 @@ chmod +x "$BIN/omarchy"
 
 PATH="$BIN:$PATH" \
 HOME="$TEST_HOME" \
+XDG_CONFIG_HOME="$TEST_HOME/.config" \
 OMAPLUG_TEST_HELPER="$ROOT/update-helper.sh" \
 OMAPLUG_TEST_STATUS="$STATUS" \
 QT_QPA_PLATFORM=offscreen \
