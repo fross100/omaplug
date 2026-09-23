@@ -46,6 +46,7 @@ chmod +x "$BIN/omarchy"
 export PATH="$BIN:$PATH"
 export OMAPLUG_TEST_LOG="$LOG"
 export HOME="$TEST_HOME"
+export XDG_CONFIG_HOME="$TEST_HOME/.config"
 
 # A prior run may have left a status file created under a permissive umask.
 # The helper must tighten it before writing any job details.
