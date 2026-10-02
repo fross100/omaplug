@@ -445,7 +445,10 @@ Rectangle {
                 : page.bulkCount === 0 ? "No updates match your selected scope"
                 : page.bulkCount + " update(s) match your selected scope"
               enabled: page.bulkCount > 0 && page.bulkReady && !page.checking && !page.updateRunning
-              visible: page.pendingCount > 0 && !page.checking
+              // Always rendered. A button that disappears whenever there is
+              // nothing to do leaves no trace that the feature exists; the
+              // enabled binding above already says when it is actionable.
+              visible: true
               foreground: page.foreground
               accent: Color.accent
               fontFamily: page.fontFamily
