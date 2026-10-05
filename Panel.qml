@@ -1908,14 +1908,14 @@ Panel {
     // ------------------------------------------------------------------- content
 
     // Persistent app header: sits above every page (main, updates, remove).
-    Rectangle {
+    // Plain Item (no background rect) so the popup card background renders once.
+    Item {
       id: appHeader
       anchors.top: parent.top
       anchors.left: parent.left
       anchors.right: parent.right
       height: appHeaderColumn.implicitHeight + Style.space(16)
       z: 6000
-      color: root.panelBackground
 
       ColumnLayout {
         id: appHeaderColumn
@@ -1939,7 +1939,7 @@ Panel {
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             text: root.iconFor("omaplug") || "\udb85\udcd9"
-            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            color: root.contentForeground
             font.family: root.contentFontFamily
             font.pixelSize: Style.space(34)
             font.bold: true
@@ -1997,7 +1997,7 @@ Panel {
             Label {
               text: root.headerSummary
               textFormat: Text.PlainText
-              color: Qt.darker(root.contentForeground, 1.5)
+              color: root.contentForeground
               font.family: root.contentFontFamily
               font.pixelSize: Style.font.bodySmall
               Layout.fillWidth: true
