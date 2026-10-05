@@ -11,7 +11,7 @@ curl -fsSL --max-time 30 --max-filesize 16777216 "$CATALOG_URL" |
     else
       {
         plugins: [
-          limit(4096; .plugins[])
+          .plugins[]
           | select((.id | type) == "string" and (.id | length) > 0)
           | ({
               id,
