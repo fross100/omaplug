@@ -16,7 +16,7 @@ import qs.Ui
 //   line marks the exact insertion point. Neither changes delegate heights,
 //   so the list never shifts under the cursor mid-drag.
 // - Plain hover does nothing — only an active drag shows indicators.
-Rectangle {
+Item {
   id: board
 
   required property bool open
@@ -29,7 +29,6 @@ Rectangle {
   signal dropRequested(string pluginId, string section, int index)
 
   visible: open
-  color: panelBackground
 
   property bool _stayLoaded: false
   onOpenChanged: {

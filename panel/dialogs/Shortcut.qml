@@ -22,7 +22,7 @@ Rectangle {
   signal actionRequested(string action, string combination)
   property string capturedShortcut: ""
   visible: open
-  color: Util.alpha(panelBackground, 0.7)
+  color: Util.alpha("black", 0.6)
   onOpenChanged: if (open) {
     capturedShortcut = ""
     captureBox.forceActiveFocus()

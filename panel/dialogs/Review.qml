@@ -21,7 +21,7 @@ Rectangle {
   signal installRequested(string rawUrl)
 
   visible: open
-  color: Util.alpha(panelBackground, 0.7)
+  color: Util.alpha("black", 0.6)
   focus: true
   onOpenChanged: {
     if (open) Qt.callLater(function() { urlField.forceActiveFocus() })

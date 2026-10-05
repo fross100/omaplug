@@ -203,23 +203,29 @@ Panel {
   readonly property string bulkUpdateLabel: root.bulkUpdateScope === "verified"
     ? "Update verified" : root.bulkUpdateScope === "pending" ? "Update verified + pending" : "Update all"
 
-  // ---- Header "Update All". The bulk-update capability was always here; what
-  // was missing was any way to reach it. Its only entry point was an
-  // unlabelled icon button, and the bulk button on the Updates page is gated
-  // on `pendingCount > 0`, so a freshly opened panel that has not checked yet
-  // shows no sign the feature exists at all.
+  // ---- "Update All" button (status row, right edge). The glyph renders via
+  // iconText so it can spin on its own while checking; the text property
+  // below carries no glyph. Scope-aware: label, tooltip, enabled state and
+  // action all follow bulkUpdateKeys, which Presentation.bulkUpdateKeys()
+  // already filters by bulkUpdateScope. The bulk button on the Updates page
+  // is gated on `pendingCount > 0`, so a freshly opened panel that has not
+  // checked yet would otherwise show no sign the feature exists at all.
   readonly property bool updateCheckHasRun: Object.keys(root.updateStates).length > 0
-  readonly property string updateAllHeaderLabel: root.updateDetachedRunning ? "\uf021  Updating\u2026"
-    : root.checkingUpdates ? "\uf021  Checking\u2026"
-    : root.pendingUpdateCount > 0 ? "\uf021  Update All (" + root.pendingUpdateCount + ")"
-    : root.updateCheckHasRun ? "\uf021  Up to date"
-    : "\uf021  Check for updates"
+  readonly property bool bulkUpdateReady: root.bulkUpdateScope === "all" || !root.marketplaceFetching
+  readonly property string updateAllHeaderText: root.updateDetachedRunning ? "Updating\u2026"
+    : root.checkingUpdates || !root.bulkUpdateReady ? "Checking\u2026"
+    : root.bulkUpdateKeys.length > 0 ? root.bulkUpdateLabel + " (" + root.bulkUpdateKeys.length + ")"
+    : root.updateCheckHasRun ? "Up to date"
+    : "Check for updates"
   readonly property string updateAllHeaderTooltip: root.updateDetachedRunning
     ? "An update run is already in progress"
-    : root.checkingUpdates ? "Checking every installed plugin for updates\u2026"
-    : root.pendingUpdateCount > 0
-      ? "Update the " + root.pendingUpdateCount + " plugin(s) with changes waiting"
-      : root.updateCheckHasRun ? "Every installed plugin is already current"
+    : root.checkingUpdates || !root.bulkUpdateReady ? "Checking every installed plugin for updates\u2026"
+    : root.bulkUpdateKeys.length > 0
+      ? "Update " + root.bulkUpdateKeys.length + " plugin source(s) under the current '" + root.bulkUpdateLabel + "' scope"
+      : root.updateCheckHasRun
+        ? (root.pendingUpdateCount > root.bulkUpdateKeys.length
+          ? "Updates exist outside the current '" + root.bulkUpdateLabel + "' scope"
+          : "Every installed plugin is already current")
         : "Check every installed plugin for updates"
 
   // updateAll() has nothing to act on until a check has populated the bulk
@@ -228,7 +234,7 @@ Panel {
   function updateEverything() {
     root.updatesPageOpen = true
     if (root.checkingUpdates || root.updateDetachedRunning) return
-    if (root.pendingUpdateCount > 0) root.updateAll()
+    if (root.bulkUpdateKeys.length > 0) root.updateAll()
     else if (!root.updateCheckHasRun) root.checkUpdates()
   }
 
@@ -2012,13 +2018,14 @@ Panel {
       anchors.fill: parent
       clip: true
       anchors.topMargin: appHeader.height
-      // The updates page (z: 5000, below) is a full overlay, not a child of
-      // this Item, so painting/input here would otherwise carry on
-      // underneath it - visible through any transparency in panelBackground,
-      // and still clickable through any gap the overlay's own MouseArea
-      // misses. Hiding this Item outright while that page is open removes
-      // both problems at the source instead of only blocking clicks.
-      visible: !root.updatesPageOpen
+      // The overlay pages (updates/settings/layout, z: 5000, below) are full
+      // overlays, not children of this Item, so painting/input here would
+      // otherwise carry on underneath them - visible through the now
+      // background-free pages, and still clickable through any gap the
+      // overlay's own MouseArea misses. Hiding this Item outright while any
+      // page is open removes both problems at the source instead of only
+      // blocking clicks.
+      visible: !root.updatesPageOpen && !root.settingsPageOpen && !root.layoutPageOpen
 
       MouseArea {
         anchors.fill: parent
@@ -2039,39 +2046,6 @@ Panel {
         anchors.margins: Style.space(16)
         anchors.bottomMargin: 0
         spacing: Style.space(10)
-
-        // The bulk-update capability was always here; nothing surfaced it. Its
-        // only entry point was an unlabelled glyph, and the button on the
-        // Updates page is gated on a check having already found something, so
-        // a freshly opened panel showed no sign the feature existed.
-        //
-        // It gets its own row because this panel is ~520px of content width:
-        // neither the title row nor the "Installed Plugins" row can take
-        // another labelled button without overflowing and drawing over its
-        // neighbour (RowLayout will not shrink a fillWidth Label below its
-        // implicit width, so the text spills instead of eliding).
-        RowLayout {
-          Layout.fillWidth: true
-          spacing: Style.space(8)
-
-          Button {
-            id: updateAllButton
-            text: root.updateAllHeaderLabel
-            tooltipText: root.updateAllHeaderTooltip
-            bordered: true
-            enabled: !root.checkingUpdates && !root.updateDetachedRunning
-              && (root.pendingUpdateCount > 0 || !root.updateCheckHasRun)
-            foreground: root.contentForeground
-            accent: Color.accent
-            fontFamily: root.contentFontFamily
-            fontSize: Style.font.bodySmall
-            horizontalPadding: Style.space(12)
-            verticalPadding: Style.space(5)
-            onClicked: root.updateEverything()
-          }
-
-          Item { Layout.fillWidth: true }
-        }
 
         RowLayout {
           Layout.fillWidth: true
@@ -2325,6 +2299,26 @@ Panel {
             horizontalPadding: Style.space(12)
             verticalPadding: Style.space(6)
             onClicked: root.removeSelected()
+          }
+
+          Button {
+            id: updateAllButton
+            iconText: "\uf021"
+            text: root.updateAllHeaderText
+            tooltipText: root.updateAllHeaderTooltip
+            bordered: true
+            enabled: !root.checkingUpdates && !root.updateDetachedRunning
+              && root.bulkUpdateReady
+              && (root.bulkUpdateKeys.length > 0 || !root.updateCheckHasRun)
+            foreground: root.contentForeground
+            accent: Color.accent
+            iconSpinning: root.checkingUpdates || root.updateDetachedRunning
+            iconSize: Style.font.body
+            fontFamily: root.contentFontFamily
+            fontSize: Style.font.bodySmall
+            horizontalPadding: Style.space(12)
+            verticalPadding: Style.space(5)
+            onClicked: root.updateEverything()
           }
         }
       }

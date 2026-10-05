@@ -6,7 +6,7 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 
-Rectangle {
+Item {
   id: page
   required property bool open
   required property real topInset
@@ -30,7 +30,6 @@ Rectangle {
   signal openUrlRequested(string url)
 
   visible: open
-  color: panelBackground
   onOpenChanged: if (open) settingsKeys.forceActiveFocus()
 
   MouseArea { anchors.fill: parent }

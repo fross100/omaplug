@@ -8,7 +8,7 @@ import qs.Ui
 import "../Presentation.js" as Presentation
 import "../plugin" as Plugin
 
-Rectangle {
+Item {
   id: page
 
   required property bool open
@@ -43,7 +43,6 @@ Rectangle {
   signal updateAllRequested
 
   visible: open
-  color: panelBackground
 
   // Preserve scroll and delegate state after the page has been opened once.
   property bool _stayLoaded: false
@@ -445,6 +444,7 @@ Rectangle {
                 : page.bulkCount === 0 ? "No updates match your selected scope"
                 : page.bulkCount + " update(s) match your selected scope"
               enabled: page.bulkCount > 0 && page.bulkReady && !page.checking && !page.updateRunning
+              bordered: true
               // Always rendered. A button that disappears whenever there is
               // nothing to do leaves no trace that the feature exists; the
               // enabled binding above already says when it is actionable.
