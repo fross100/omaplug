@@ -14,6 +14,7 @@ Item {
   required property int index
   required property int rowCount
   required property var marketplaceEntry
+  required property bool marketplaceUnavailable
   required property string localCommit
   required property string repoUrl
   required property bool repoKnown
@@ -167,7 +168,7 @@ Item {
 
           Rectangle {
             id: verificationBadge
-            visible: pluginRow.listed
+            visible: pluginRow.listed || pluginRow.marketplaceUnavailable
             anchors.left: nameLabel.right
             anchors.leftMargin: nameRow.spacing
             anchors.verticalCenter: parent.verticalCenter
@@ -186,7 +187,7 @@ Item {
               spacing: Style.space(3)
 
               Text {
-                visible: pluginRow.verified && !pluginRow.updateUnverified
+                visible: pluginRow.verified && !pluginRow.updateUnverified && !pluginRow.marketplaceUnavailable
                 text: "\uf058"
                 textFormat: Text.PlainText
                 color: Color.accent
@@ -196,7 +197,7 @@ Item {
               }
 
               Text {
-                visible: pluginRow.updateUnverified
+                visible: pluginRow.updateUnverified && !pluginRow.marketplaceUnavailable
                 text: "\uf071"
                 textFormat: Text.PlainText
                 color: Qt.hsla(0.12, 0.75, 0.55, 1)
@@ -206,7 +207,7 @@ Item {
               }
 
               Text {
-                text: pluginRow.updateUnverified ? "Update Unverified" : pluginRow.verified ? "Verified" : "Unverified"
+                text: pluginRow.marketplaceUnavailable ? "Unavailable" : pluginRow.updateUnverified ? "Update Unverified" : pluginRow.verified ? "Verified" : "Unverified"
                 textFormat: Text.PlainText
                 color: pluginRow.updateUnverified ? Qt.hsla(0.12, 0.75, 0.55, 1)
                   : pluginRow.verified ? Color.accent

@@ -1105,7 +1105,8 @@ Panel {
         }
       }
     } catch (e) {
-      console.log("marketplace catalog parse failed:", e)
+      root.marketplaceFetchFailed = true
+      console.warn("marketplace catalog parse failed:", e)
       return
     }
     root.marketplaceMap = map
@@ -1141,7 +1142,10 @@ Panel {
       if (exitCode !== 0) {
         root.marketplaceFetching = false
         root.marketplaceFetchFailed = true
-        console.log("marketplace catalog fetch failed, exit code:", exitCode)
+        if (exitCode === 63)
+          console.warn("marketplace catalog fetch failed: catalog exceeded the 16 MiB fetch cap (curl exit 63)")
+        else
+          console.warn("marketplace catalog fetch failed, exit code:", exitCode)
         return
       }
       root.applyMarketplaceCatalog(marketplaceStdout.text)
@@ -2136,6 +2140,38 @@ Panel {
           }
         }
 
+        // Shown instead of stale badges: a failed catalog fetch leaves the
+        // last good map in place, so without this the rows would keep
+        // presenting outdated verification state as current.
+        RowLayout {
+          Layout.fillWidth: true
+          spacing: Style.space(8)
+          visible: root.marketplaceFetchFailed
+
+          Label {
+            text: "Marketplace unavailable \u2014 verification badges may be stale."
+            textFormat: Text.PlainText
+            color: Qt.hsla(0.12, 0.75, 0.55, 1)
+            font.family: root.contentFontFamily
+            font.pixelSize: Style.font.bodySmall
+            Layout.fillWidth: true
+          }
+
+          Button {
+            text: "Retry"
+            tooltipText: "Fetch the marketplace catalog again"
+            bordered: true
+            enabled: !root.marketplaceFetching
+            foreground: root.contentForeground
+            accent: Color.accent
+            fontFamily: root.contentFontFamily
+            fontSize: Style.font.bodySmall
+            horizontalPadding: Style.space(12)
+            verticalPadding: Style.space(5)
+            onClicked: root.fetchMarketplace()
+          }
+        }
+
         RowLayout {
           Layout.fillWidth: true
           spacing: Style.space(6)
@@ -2212,6 +2248,7 @@ Panel {
             marketplaceEntry: pluginRow.modelData.firstParty
               ? null
               : (root.marketplaceMap[String(pluginRow.modelData.id)] || null)
+            marketplaceUnavailable: !pluginRow.modelData.firstParty && root.marketplaceFetchFailed
             localCommit: root.pluginCommits[String(pluginRow.modelData.sourceKey)] || ""
             repoUrl: root.pluginRepos[String(pluginRow.modelData.sourceKey)] || ""
             repoKnown: root.pluginRepos[String(pluginRow.modelData.sourceKey)] !== undefined
