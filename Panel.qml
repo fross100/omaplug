@@ -2470,9 +2470,6 @@ Panel {
       onEnabledChangeRequested: function(pluginId, enabled) {
         root.setPluginEnabled(pluginId, enabled)
       }
-      onOpenPanelRequested: function(pluginId) {
-        Quickshell.execDetached(["omarchy-shell", "shell", "summon", pluginId, "{}"])
-      }
       onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
       onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
       onRemovalRequested: function(pluginId) { root.removePlugin(pluginId) }
