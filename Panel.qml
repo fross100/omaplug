@@ -2270,6 +2270,9 @@ Panel {
             onEnabledChangeRequested: function(pluginId, enabled) {
               root.setPluginEnabled(pluginId, enabled)
             }
+            onOpenPanelRequested: function(pluginId) {
+              Quickshell.execDetached(["omarchy-shell", "shell", "summon", pluginId, "{}"])
+            }
             onOpenUrlRequested: function(url) { Qt.openUrlExternally(url) }
             onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
             onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
@@ -2466,6 +2469,9 @@ Panel {
       onCloseRequested: root.closeRowMenu()
       onEnabledChangeRequested: function(pluginId, enabled) {
         root.setPluginEnabled(pluginId, enabled)
+      }
+      onOpenPanelRequested: function(pluginId) {
+        Quickshell.execDetached(["omarchy-shell", "shell", "summon", pluginId, "{}"])
       }
       onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
       onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
