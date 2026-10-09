@@ -108,6 +108,8 @@ ColumnLayout {
       iconSize: Style.font.caption
       horizontalPadding: Style.space(4)
       verticalPadding: Style.space(3)
+      Layout.preferredWidth: implicitWidth
+      Layout.minimumWidth: implicitWidth
       Layout.preferredHeight: actions.menuWidth
       Layout.minimumHeight: actions.menuWidth
       Layout.maximumHeight: actions.menuWidth
