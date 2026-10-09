@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 ColumnLayout {
@@ -57,8 +58,8 @@ ColumnLayout {
         height: toggle.trackHeight
         radius: Style.cornerRadius > 0 ? height / 2 : 0
         color: toggle.checked
-          ? Color.accent
-          : Style.normalFillFor(actions.foreground, Color.accent)
+          ? Commons.Color.accent
+          : Style.normalFillFor(actions.foreground, Commons.Color.accent)
         Behavior on color { ColorAnimation { duration: 120 } }
 
         Rectangle {
@@ -67,7 +68,7 @@ ColumnLayout {
           radius: Style.cornerRadius > 0 ? height / 2 : 0
           x: toggle.checked ? toggle.trackWidth - width - toggle.inset : toggle.inset
           anchors.verticalCenter: parent.verticalCenter
-          color: toggle.checked ? Color.background : Qt.darker(actions.foreground, 1.25)
+          color: toggle.checked ? Commons.Color.background : Qt.darker(actions.foreground, 1.25)
           Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
           Behavior on color { ColorAnimation { duration: 120 } }
         }
@@ -91,9 +92,9 @@ ColumnLayout {
       visible: !actions.plugin.firstParty
       bordered: true
       borderSpec: menuButton.hot ? Border.none()
-        : Border.controlSpec("normal", menuButton.foreground, Color.accent)
+        : Border.controlSpec("normal", menuButton.foreground, Commons.Color.accent)
       foreground: actions.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: actions.fontFamily
       fontSize: Style.font.bodySmall
       horizontalPadding: 0
@@ -125,9 +126,9 @@ ColumnLayout {
       text: "SOURCE \uDB85\uDD94"
       bordered: true
       borderSpec: sourceButton.hot ? Border.none()
-        : Border.controlSpec("normal", sourceButton.foreground, Color.accent)
+        : Border.controlSpec("normal", sourceButton.foreground, Commons.Color.accent)
       foreground: actions.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: actions.fontFamily
       fontSize: Style.font.caption
       iconSize: Style.font.caption
