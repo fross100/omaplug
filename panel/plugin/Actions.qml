@@ -88,7 +88,9 @@ ColumnLayout {
       id: openButton
 
       readonly property bool hasPanel: {
-        var kinds = actions.plugin.kinds || []
+        var kinds = actions.plugin.kinds
+        if (!kinds) return false
+        if (typeof kinds === "string") return kinds.indexOf("panel") !== -1
         for (var i = 0; i < kinds.length; i++) {
           if (kinds[i] === "panel") return true
         }
