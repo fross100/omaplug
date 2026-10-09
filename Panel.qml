@@ -2272,6 +2272,7 @@ Panel {
             }
             onOpenPanelRequested: function(pluginId) {
               Quickshell.execDetached(["omarchy-shell", "shell", "summon", pluginId, "{}"])
+              root.close()
             }
             onOpenUrlRequested: function(url) { Qt.openUrlExternally(url) }
             onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
