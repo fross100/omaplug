@@ -6,6 +6,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "panel/Presentation.js" as Presentation
 import "panel/dialogs" as Dialogs
@@ -28,10 +29,10 @@ Panel {
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
 
-  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+  readonly property color contentForeground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   // Overlays cover the popup's own card, so they match the popup background.
-  readonly property color panelBackground: Color.popups.background
+  readonly property color panelBackground: Commons.Color.popups.background
   readonly property string pluginVersion: {
     for (var i = 0; i < root.pluginRows.length; i++) {
       if (String(root.pluginRows[i].id || "") === root.moduleName)
@@ -1979,7 +1980,7 @@ Panel {
                 tooltipText: "Open the Omarchy plugin marketplace"
                 bordered: true
                 foreground: root.contentForeground
-                accent: Color.accent
+                accent: Commons.Color.accent
                 fontFamily: root.contentFontFamily
                 fontSize: Style.font.caption
                 horizontalPadding: Style.space(8)
@@ -1994,7 +1995,7 @@ Panel {
                 tooltipText: "Clear the QML cache and restart the shell so every plugin reloads from source"
                 bordered: true
                 foreground: root.contentForeground
-                accent: Color.accent
+                accent: Commons.Color.accent
                 fontFamily: root.contentFontFamily
                 fontSize: Style.font.caption
                 horizontalPadding: Style.space(8)
@@ -2069,7 +2070,7 @@ Panel {
             tooltipText: "Select plugins to remove"
             enabled: !root.removingPlugin
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2085,9 +2086,9 @@ Panel {
             tooltipText: root.checkingUpdates ? "Checking for updates…" : "Check updates"
             enabled: !root.checkingUpdates && !root.updateDetachedRunning
             foreground: root.checkingUpdates
-              ? Color.muted
+              ? Commons.Color.muted
               : root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             iconSpinning: root.checkingUpdates
             // Keep the glyph's visual center stable while it spins and make
             // the disabled state unmistakable against bright themes.
@@ -2107,7 +2108,7 @@ Panel {
             iconText: ""
             tooltipText: "Arrange bar layout"
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2119,7 +2120,7 @@ Panel {
             iconText: "󱓖"
             tooltipText: "Install plugin"
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2131,7 +2132,7 @@ Panel {
             iconText: "\uf013"
             tooltipText: "Settings"
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2163,7 +2164,7 @@ Panel {
             bordered: true
             enabled: !root.marketplaceFetching
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(12)
@@ -2189,7 +2190,7 @@ Panel {
             foreground: root.contentForeground
             background: root.panelBackground
             popupBorder: Util.alpha(root.contentForeground, 0.2)
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             onChanged: function(v) { root.filterMode = parseInt(v) }
           }
@@ -2203,7 +2204,7 @@ Panel {
             foreground: root.contentForeground
             background: root.panelBackground
             popupBorder: Util.alpha(root.contentForeground, 0.2)
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             onChanged: function(v) { root.filterKind = v }
           }
@@ -2214,7 +2215,7 @@ Panel {
             placeholderText: "Search plugins…"
             placeholderTextColor: Util.alpha(root.contentForeground, 0.45)
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             font.family: root.contentFontFamily
             text: root.searchText
             onTextChanged: root.searchText = text
@@ -2298,7 +2299,7 @@ Panel {
             textFormat: Text.PlainText
             color: root.checkingUpdates
               ? Qt.darker(root.contentForeground, 1.5)
-              : Style.selectedStateColor(root.contentForeground, Color.accent)
+              : Style.selectedStateColor(root.contentForeground, Commons.Color.accent)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -2307,7 +2308,7 @@ Panel {
             visible: root.removeSummary !== ""
             text: root.removeSummary
             textFormat: Text.PlainText
-            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            color: Style.selectedStateColor(root.contentForeground, Commons.Color.accent)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -2316,7 +2317,7 @@ Panel {
             visible: root.moveSummary !== ""
             text: root.moveSummary
             textFormat: Text.PlainText
-            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            color: Style.selectedStateColor(root.contentForeground, Commons.Color.accent)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -2330,7 +2331,7 @@ Panel {
             text: "Remove selected (" + root.selectedRemoveCount + ")"
             enabled: !root.removingPlugin
             foreground: root.contentForeground
-            accent: Color.urgent
+            accent: Commons.Color.urgent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(12)
@@ -2348,7 +2349,7 @@ Panel {
               && root.bulkUpdateReady
               && (root.bulkUpdateKeys.length > 0 || !root.updateCheckHasRun)
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             iconSpinning: root.checkingUpdates || root.updateDetachedRunning
             iconSize: Style.font.body
             fontFamily: root.contentFontFamily
@@ -2503,9 +2504,9 @@ Panel {
         : "\"" + (root.removePending.length === 1 ? root.removePending[0] : "") + "\" will be deleted from your config. This cannot be undone."
       confirmText: "Remove"
       dismissEnabled: !root.removingPlugin
-      borderColor: Color.urgent
-      confirmForeground: Color.urgent
-      confirmAccent: Color.urgent
+      borderColor: Commons.Color.urgent
+      confirmForeground: Commons.Color.urgent
+      confirmAccent: Commons.Color.urgent
       confirmBordered: true
       titleWrapMode: Text.WordWrap
       foreground: root.contentForeground
@@ -2557,8 +2558,8 @@ Panel {
       title: "Install plugin?"
       message: "Review the source before enabling this plugin. It will be installed disabled."
       confirmText: "Install"
-      confirmAccent: Color.urgent
-      confirmForeground: Color.urgent
+      confirmAccent: Commons.Color.urgent
+      confirmForeground: Commons.Color.urgent
       maximumWidth: Style.space(380)
       titleWrapMode: Text.WordWrap
       pluginName: root.installReviewEntry() ? (root.installReviewEntry().name || root.installPendingUrl.split("/").pop()) : root.installPendingUrl.split("/").pop()

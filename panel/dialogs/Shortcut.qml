@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Rectangle {
@@ -74,7 +75,7 @@ Rectangle {
         Layout.preferredHeight: Style.space(56)
         radius: Style.cornerRadius
         color: Util.alpha(dialog.foreground, 0.06)
-        border.color: activeFocus ? Color.accent : Util.alpha(dialog.foreground, 0.3)
+        border.color: activeFocus ? Commons.Color.accent : Util.alpha(dialog.foreground, 0.3)
         border.width: 1
         activeFocusOnTab: true
         property int heldKey: 0
@@ -160,7 +161,7 @@ Rectangle {
           Layout.fillWidth: true
           horizontalAlignment: Text.AlignLeft
           wrapMode: Text.WordWrap
-          color: /saved|removed|Available|No shortcut/.test(dialog.result) ? Color.accent : Color.urgent
+          color: /saved|removed|Available|No shortcut/.test(dialog.result) ? Commons.Color.accent : Commons.Color.urgent
           font.family: dialog.fontFamily
           font.pixelSize: Style.font.caption
         }
@@ -171,7 +172,7 @@ Rectangle {
           visible: dialog.pendingShortcut !== ""
           text: "Replace"
           enabled: !dialog.running
-          foreground: Color.urgent
+          foreground: Commons.Color.urgent
           fontFamily: dialog.fontFamily
           fontSize: Style.font.caption
           onClicked: dialog.actionRequested("replace", dialog.pendingShortcut)
