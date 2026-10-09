@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import "../Presentation.js" as Presentation
 
 RowLayout {
@@ -58,7 +59,7 @@ RowLayout {
       anchors.verticalCenter: parent.verticalCenter
       text: "↗"
       textFormat: Text.PlainText
-      color: Color.accent
+      color: Commons.Color.accent
       font.family: links.fontFamily
       font.pixelSize: Style.font.caption
     }
@@ -89,7 +90,7 @@ RowLayout {
     visible: links.snapshotCommit !== ""
     text: "\uDB81\uDF91 " + Presentation.shortSha(links.snapshotCommit)
     textFormat: Text.PlainText
-    color: links.commitMatches ? Color.accent : Qt.darker(links.foreground, 1.6)
+    color: links.commitMatches ? Commons.Color.accent : Qt.darker(links.foreground, 1.6)
     font.family: links.fontFamily
     font.pixelSize: Style.font.caption
     font.underline: snapshotHover.hovered && links.snapshotUrl !== ""
@@ -146,7 +147,7 @@ RowLayout {
     visible: links.snapshotCommit !== "" && links.localCommit !== "" && !links.commitMatches
     text: Presentation.shortSha(links.localCommit) + (links.localUrl !== "" ? " ↗" : "")
     textFormat: Text.PlainText
-    color: Color.accent
+    color: Commons.Color.accent
     font.family: links.fontFamily
     font.pixelSize: Style.font.caption
     font.underline: localHover.hovered && links.localUrl !== ""
@@ -181,7 +182,7 @@ RowLayout {
     visible: links.compareUrl !== ""
     text: "view changes ↗"
     textFormat: Text.PlainText
-    color: Color.accent
+    color: Commons.Color.accent
     font.family: links.fontFamily
     font.pixelSize: Style.font.caption
     font.underline: compareHover.hovered
@@ -213,7 +214,7 @@ RowLayout {
   Text {
     text: "Listing checks ↗"
     textFormat: Text.PlainText
-    color: Color.accent
+    color: Commons.Color.accent
     font.family: links.fontFamily
     font.pixelSize: Style.font.caption
     font.underline: checksHover.hovered
