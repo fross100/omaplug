@@ -67,8 +67,16 @@ BarWidget {
         id: button
         anchors.fill: parent
         bar: root.bar
-        text: root.opened ? "\udb85\udcd3" : "\udb85\udcd9"
+        text: ""
         tooltipText: root.opened ? "Close Plugin Manager" : "Plugin Manager"
+        iconComponent: Component {
+            Image {
+                source: "/home/guy/.config/omarchy/bar/modules/assets/puzzle.svg"
+                width: 16; height: 16
+                fillMode: Image.PreserveAspectFit
+                smooth: true
+            }
+        }
 
         onPressed: function(b) {
             if (b === Qt.LeftButton) root.togglePanel()

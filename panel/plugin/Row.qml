@@ -32,6 +32,7 @@ Item {
 
   signal removalSelectionRequested(string pluginId)
   signal enabledChangeRequested(string pluginId, bool enabled)
+  signal openPanelRequested(string pluginId)
   signal openUrlRequested(string url)
   signal sourceRequested(string sourceKey)
   signal updateRequested(string sourceKey)
@@ -339,6 +340,9 @@ Item {
         fontFamily: pluginRow.fontFamily
         onEnabledChangeRequested: function(enabled) {
           pluginRow.enabledChangeRequested(pluginRow.modelData.id, enabled)
+        }
+        onOpenPanelRequested: function(pluginId) {
+          pluginRow.openPanelRequested(pluginId)
         }
         onSourceRequested: function(sourceKey) { pluginRow.sourceRequested(sourceKey) }
         onUpdateRequested: function(sourceKey) { pluginRow.updateRequested(sourceKey) }

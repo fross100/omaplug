@@ -19,6 +19,7 @@ ColumnLayout {
   required property string fontFamily
 
   signal enabledChangeRequested(bool enabled)
+  signal openPanelRequested(string pluginId)
   signal sourceRequested(string sourceKey)
   signal updateRequested(string sourceKey)
   signal menuRequested(var sourceItem, real x, real y)
@@ -81,6 +82,42 @@ ColumnLayout {
           Qt.callLater(function() { actions.enabledChangeRequested(!toggle.checked) })
         }
       }
+    }
+
+    Button {
+      id: openButton
+
+      readonly property bool hasPanel: {
+        var kinds = actions.plugin.kinds
+        if (!kinds) return false
+        if (typeof kinds === "string") return kinds.indexOf("panel") !== -1
+        for (var i = 0; i < kinds.length; i++) {
+          if (kinds[i] === "panel") return true
+        }
+        return false
+      }
+
+      visible: actions.pluginEnabled && hasPanel
+      tooltipText: "Open plugin panel"
+      text: "OPEN"
+      bordered: true
+      borderSpec: openButton.hot ? Border.none()
+        : Border.controlSpec("normal", openButton.foreground, Color.accent)
+      foreground: actions.foreground
+      accent: Color.accent
+      fontFamily: actions.fontFamily
+      fontSize: Style.font.caption
+      iconSize: Style.font.caption
+      horizontalPadding: Style.space(4)
+      verticalPadding: Style.space(3)
+      Layout.preferredWidth: actions.menuWidth * 2.5
+      Layout.minimumWidth: actions.menuWidth * 2.5
+      Layout.maximumWidth: actions.menuWidth * 2.5
+      Layout.preferredHeight: actions.menuWidth
+      Layout.minimumHeight: actions.menuWidth
+      Layout.maximumHeight: actions.menuWidth
+      Layout.alignment: Qt.AlignVCenter
+      onClicked: actions.openPanelRequested(actions.plugin.id)
     }
 
     Button {

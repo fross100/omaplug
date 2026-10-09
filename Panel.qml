@@ -2270,6 +2270,10 @@ Panel {
             onEnabledChangeRequested: function(pluginId, enabled) {
               root.setPluginEnabled(pluginId, enabled)
             }
+            onOpenPanelRequested: function(pluginId) {
+              Quickshell.execDetached(["omarchy-shell", "shell", "summon", pluginId, "{}"])
+              root.close()
+            }
             onOpenUrlRequested: function(url) { Qt.openUrlExternally(url) }
             onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
             onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
