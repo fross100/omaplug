@@ -66,6 +66,20 @@ Omaplug is listed on the marketplace: [plugins.omarchy.org/plugin.html?id=omaplu
 - **🔍 Search & filter** — narrow the list to Omarchy plugins, third-party plugins, or search by name, description, ID, author, or kind.
 - **♻️ Restart shell** — if a plugin ever acts up from stale compiled code, one button clears the QML cache and restarts the shell so everything reloads fresh.
 
+## Fork attribution
+
+Forks that keep their own repository URL can still credit the upstream project. Add an optional `basedOn` object to the plugin's `manifest.json`:
+
+```json
+"author": "Mystical89",
+"basedOn": {
+  "author": "AlexMedela",
+  "url": "https://github.com/AlexMedela/simple-sysstats"
+}
+```
+
+The row then reads `by Mystical89 ↗ · based on AlexMedela ↗`: the first link opens the fork owner on GitHub, the second opens the upstream repository. `basedOn.url` is only linkified when it is an `https://github.com/<owner>/<repo>` URL. Without `basedOn`, the row is unchanged.
+
 ## Install
 
 ```bash

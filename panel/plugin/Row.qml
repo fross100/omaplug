@@ -46,6 +46,9 @@ Item {
     (!verified && marketplaceEntry.snapshotStatus === "update-unverified")
     || (marketplaceEntry.verified === true && commitKnown && !commitMatches))
   readonly property string authorUrl: modelData.firstParty ? "" : Presentation.authorUrl(repoUrl)
+  readonly property string basedOnAuthor: String(modelData.basedOnAuthor || "")
+  readonly property string basedOnUrl: modelData.firstParty ? ""
+    : Presentation.normalizedGitHubUrl(modelData.basedOnUrl)
   readonly property string kindLabel: Presentation.kindLabel(modelData.kinds, knownKinds)
 
   height: card.height + Style.space(9)
@@ -286,6 +289,33 @@ Item {
               enabled: pluginRow.authorUrl !== ""
               cursorShape: Qt.PointingHandCursor
               onClicked: pluginRow.openUrlRequested(pluginRow.authorUrl)
+            }
+          }
+
+          Text {
+            visible: pluginRow.basedOnAuthor !== "" && pluginRow.basedOnUrl !== ""
+            text: "· based on " + pluginRow.basedOnAuthor + " ↗"
+            Layout.minimumWidth: 0
+            elide: Text.ElideRight
+            textFormat: Text.PlainText
+            color: Color.accent
+            font.family: pluginRow.fontFamily
+            font.pixelSize: Style.font.caption
+            font.underline: basedOnHover.hovered
+
+            ToolTip.text: pluginRow.basedOnUrl
+            ToolTip.visible: basedOnHover.hovered
+            ToolTip.delay: 400
+
+            HoverHandler {
+              id: basedOnHover
+              cursorShape: Qt.PointingHandCursor
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              cursorShape: Qt.PointingHandCursor
+              onClicked: pluginRow.openUrlRequested(pluginRow.basedOnUrl)
             }
           }
 

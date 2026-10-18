@@ -17,7 +17,7 @@ try {
   context.Presentation = vm.createContext({});
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../panel/Presentation.js'), 'utf8')
     .replace(/^\.pragma library\s*/, ''), context.Presentation);
-  for (const name of ['applyPluginList', 'applyPluginMetadata', 'mergeMarketplaceMetadata', 'applyMarketplaceCatalog']) {
+  for (const name of ['applyPluginList', 'applyPluginMetadata', 'mergeMarketplaceMetadata', 'applyMarketplaceCatalog', 'basedOnFields']) {
     const start = source.indexOf('  function ' + name + '(');
     assert.notEqual(start, -1);
     const end = source.indexOf('\n  }', start) + 4;
@@ -31,7 +31,13 @@ try {
   for (const [relative, id] of manifests) {
     const file = path.join(temporary, relative);
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify({ id, description: 'Installed ' + id }));
+    fs.writeFileSync(file, JSON.stringify({
+      id,
+      description: 'Installed ' + id,
+      ...(id === 'test.plugin'
+        ? { basedOn: { author: '  Upstream Author  ', url: 'https://github.com/upstream/repo' } }
+        : {})
+    }));
   }
   const catalog = JSON.stringify([
     { id: 'omarchy.clock', firstParty: true, enabled: true, kinds: ['bar-widget'] },
@@ -57,10 +63,15 @@ try {
     assert.equal(rows['catalog.only'].description, 'Cached description');
     assert.equal(rows['test.plugin'].enabled, false);
     assert.equal(rows['omarchy.clock'].enabled, true);
+    assert.equal(rows['test.plugin'].basedOnAuthor, 'Upstream Author');
+    assert.equal(rows['test.plugin'].basedOnUrl, 'https://github.com/upstream/repo');
+    assert.equal(rows['omarchy.clock'].basedOnUrl, '');
     // A later marketplace response must not replace installed metadata.
     context.mergeMarketplaceMetadata(context.marketplaceMap);
     assert.equal(context.pluginRows.find(row => row.id === 'test.plugin').description,
       'Installed test.plugin');
+    assert.equal(context.pluginRows.find(row => row.id === 'test.plugin').basedOnAuthor,
+      'Upstream Author');
   }
   console.log('plugin-metadata-test: ok');
   const page = fs.readFileSync(path.join(__dirname, '../panel/updates/Page.qml'), 'utf8');
