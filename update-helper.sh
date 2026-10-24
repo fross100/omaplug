@@ -7,7 +7,7 @@
 # progress outside the watched plugin directory so a reloaded panel can
 # reconnect.
 #
-# Usage: update-helper.sh <status-file> <job-id> <plugin-id> [plugin-id ...]
+# Usage: update-helper.sh <status-file> <job-id> <plugin-id>@<commit> [plugin-id@commit ...]
 
 set -uo pipefail
 umask 077
@@ -68,7 +68,14 @@ write_status $'total\t'"$#"
 updated=0
 failed=0
 
-for id in "$@"; do
+for target in "$@"; do
+  id=${target%%@*}
+  commit=${target#*@}
+  if [[ ! $commit =~ ^[0-9a-f]{40}$ ]]; then
+    write_status $'failed\t'"$(one_line "$id")"$'\tmissing or invalid checked commit; check for updates again'
+    failed=$((failed + 1))
+    continue
+  fi
   if [[ ! $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || $id == *..* ]]; then
     write_status $'failed\t'"$(one_line "$id")"$'\tinvalid plugin id'
     failed=$((failed + 1))
@@ -82,7 +89,7 @@ for id in "$@"; do
   fi
 
   write_status $'start\t'"$id"
-  out=$(timeout -k 2 120 omarchy plugin update "$id" --yes 2>&1 | { head -c 8000; cat >/dev/null; }; exit "${PIPESTATUS[0]}")
+  out=$(timeout -k 2 120 omarchy plugin update "$id" --yes --commit "$commit" 2>&1 | { head -c 8000; cat >/dev/null; }; exit "${PIPESTATUS[0]}")
   rc=$?
   detail=$(one_line "$out")
 

@@ -7,8 +7,8 @@ ShellRoot {
       Quickshell.env("OMAPLUG_TEST_HELPER"),
       Quickshell.env("OMAPLUG_TEST_STATUS"),
       "job-quickshell",
-      "slow",
-      "good"
+      "slow@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "good@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     ])
     exitTimer.start()
   }

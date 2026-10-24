@@ -108,6 +108,7 @@ Rectangle {
           Text {
             anchors.centerIn: parent
             text: dialog.pluginIcon || dialog.pluginName.trim().charAt(0).toUpperCase()
+            textFormat: Text.PlainText
             color: Color.background
             font.family: dialog.fontFamily
             font.pixelSize: Style.font.title

@@ -78,7 +78,7 @@ Click the gear to the right of Install. **Show Plugin Manager in Omarchy menu** 
 
 Settings also provides the automatic update check switch and interval.
 
-**Update scope** controls bulk updates: **Verified only**, **Verified + Update Unverified**, or **All plugins** (the default). The bulk-update button changes its label to match. Individual updates remain available regardless of the scope. For a repository containing several plugins, all must match the selected scope for a bulk update.
+**Update scope** controls bulk updates: **Verified only**, **Verified + Update Unverified**, or **All plugins** (the default). The bulk-update button changes its label to match. Individual updates remain available regardless of the scope. Applying updates and installations requires Omarchy plugin commands with `--commit <sha>` support. The checked/reviewed commit is passed to Omarchy; older commands reject the option and leave the checkout unchanged. For a repository containing several plugins, all must match the selected scope for a bulk update.
 
 ## Plugin keyboard shortcuts
 

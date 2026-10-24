@@ -34,3 +34,20 @@ assert.deepEqual(keys('pending'), ['verified', 'pending']);
 delete incoming.verified;
 assert.deepEqual(keys('pending'), ['pending']);
 console.log('bulk-update-scope-test: ok');
+
+// Exercise the real launcher, not a copy of its commit propagation logic.
+const panel = fs.readFileSync(path.join(__dirname, '../Panel.qml'), 'utf8');
+const launcher = panel.slice(panel.indexOf('  function startDetachedUpdates(ids)'), panel.indexOf('  function applyUpdateJobStatus()'));
+let launched;
+const root = { checkingUpdates: false, updateDetachedRunning: false, updateRunnerPath: '/helper', updateStatusPath: '/status',
+  incomingCommits: { verified: 'a'.repeat(40) }, markUpdateInterrupted(message) { this.error = message; this.updateDetachedRunning = false; } };
+const launchContext = vm.createContext({ root, Quickshell: { execDetached(argv) { launched = Array.from(argv); } },
+  updateStartTimer: { restart() {} }, updateStatusPoll: { restart() {} } });
+vm.runInContext(launcher, launchContext);
+launchContext.startDetachedUpdates(['verified']);
+assert.equal(launched[3], 'verified@' + 'a'.repeat(40));
+root.updateDetachedRunning = false;
+launched = null;
+launchContext.startDetachedUpdates(['missing']);
+assert.equal(launched, null);
+assert.match(root.error, /Check for updates again/);

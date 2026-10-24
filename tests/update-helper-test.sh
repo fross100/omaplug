@@ -63,7 +63,7 @@ assert_line() {
   }
 }
 
-if "$ROOT/update-helper.sh" "$STATUS" job-direct good fail dirty detached linked 'bad/id'; then
+if "$ROOT/update-helper.sh" "$STATUS" job-direct good@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa fail@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa dirty@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa detached@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa linked@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa bad/id@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; then
   printf 'FAIL: a partially failed update job returned success\n' >&2
   exit 1
 fi
@@ -87,8 +87,8 @@ assert_line $'done\t1\t5' "$STATUS"
   cat "$STATUS" >&2
   exit 1
 }
-assert_line 'plugin update good --yes' "$LOG"
-assert_line 'plugin update fail --yes' "$LOG"
+assert_line 'plugin update good --yes --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$LOG"
+assert_line 'plugin update fail --yes --commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$LOG"
 [[ $(wc -l < "$LOG") -eq 2 ]] || {
   printf 'FAIL: invalid plugin id reached omarchy\n' >&2
   cat "$LOG" >&2
@@ -98,14 +98,14 @@ assert_line 'plugin update fail --yes' "$LOG"
 # A live runner owns the stable status path. A second runner must fail without
 # replacing or appending to that job's status stream.
 : > "$LOG"
-"$ROOT/update-helper.sh" "$STATUS" job-first slow &
+"$ROOT/update-helper.sh" "$STATUS" job-first slow@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa &
 first_pid=$!
 for _ in {1..100}; do
   [[ -f $STATUS.flock ]] && break
   sleep 0.01
 done
 sleep 0.05
-if "$ROOT/update-helper.sh" "$STATUS" job-second good; then
+if "$ROOT/update-helper.sh" "$STATUS" job-second good@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; then
   printf 'FAIL: a concurrent update runner acquired the same lock\n' >&2
   exit 1
 else

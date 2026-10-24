@@ -206,7 +206,9 @@ def update(status, job, ids):
                        min(3600, len(ids) * 140 + 30), consume)
 
 
-def install(url, job, store):
+def install(url, job, commit, store):
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("invalid reviewed commit")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}", job):
         raise ValueError("invalid install job")
     if not re.fullmatch(r"(?:https://github\.com/|git@github\.com:|ssh://git@github\.com/)[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9][A-Za-z0-9_.-]*/?", url) or ".." in url:
@@ -215,7 +217,7 @@ def install(url, job, store):
         store.write("install.status", json.dumps({"job": job, "running": True, "pid": os.getpid()}).encode())
         output = bytearray()
         try:
-            code = run(["timeout", "-k", "2", "180", "omarchy", "plugin", "add", url, "--yes"],
+            code = run(["timeout", "-k", "2", "180", "omarchy", "plugin", "add", url, "--yes", "--commit", commit],
                        185, lambda chunk: output.extend(chunk[:max(0, 8000 - len(output))]))
             result = {"running": False, "failed": code != 0, "finished": int(time.time())}
         except (TimeoutError, ValueError, OSError) as error:
@@ -267,7 +269,7 @@ def main():
         if action in ("check", "check-manual"):
             return check_plugins(args[0], store, action == "check")
         if action == "install":
-            return install(args[0], args[1], store)
+            return install(args[0], args[1], args[2], store)
         if action == "read":
             emit(store.read(args[0]))
         elif action == "reopen-write":

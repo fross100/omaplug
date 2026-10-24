@@ -30,3 +30,26 @@ with patch.object(runtime, "run", fake_run):
         else:
             raise AssertionError(url)
 print("review-repository-test: ok")
+
+# Reviewed identity must reach the installer unchanged, including on failure.
+class Store:
+    def lock(self, name):
+        from contextlib import nullcontext
+        return nullcontext()
+
+    def write(self, name, data):
+        pass
+
+
+commands = []
+with patch.object(runtime, "run", lambda argv, seconds, consume: commands.append(argv) or 0):
+    assert runtime.install("https://github.com/example/plugin.git", "test", sha, Store()) == 0
+    assert commands[0][-3:] == ["--yes", "--commit", sha]
+    for bad in ("", "HEAD", "--upload-pack=evil", sha + "/x"):
+        try:
+            runtime.install("https://github.com/example/plugin.git", "test", bad, Store())
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(bad)
+assert len(commands) == 1
