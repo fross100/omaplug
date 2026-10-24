@@ -942,7 +942,14 @@ Panel {
       : "Updating 0 of " + ids.length + "…"
 
     var launch = [root.updateRunnerPath, root.updateStatusPath, root.updateExpectedJobId]
-    for (var i = 0; i < ids.length; i++) launch.push(ids[i])
+    for (var i = 0; i < ids.length; i++) {
+      var commit = String(root.incomingCommits[ids[i]] || "")
+      if (!/^[0-9a-f]{40}$/.test(commit)) {
+        root.markUpdateInterrupted("Check for updates again before applying")
+        return
+      }
+      launch.push(ids[i] + "@" + commit)
+    }
     try {
       Quickshell.execDetached(launch)
     } catch (e) {
@@ -1426,6 +1433,11 @@ Panel {
   function installPlugin() {
     var url = root.installPendingUrl
     if (url === "") return
+    if (!/^[0-9a-f]{40}$/.test(String(root.reviewRepository.commit || ""))) {
+      root.installResult = "Could not determine the repository commit. Review it again before installing."
+      root.installFailed = true
+      return
+    }
     root.installConfirmOpen = false
     root.installRunning = true
     root.installFailed = false
@@ -1442,7 +1454,7 @@ Panel {
     root.installResult = "Installing " + url + "…"
     root.installWatchdog.restart()
     try {
-      Quickshell.execDetached(["python3", root.runtimeStatePath, "install", url, root.installExpectedJobId])
+      Quickshell.execDetached(["python3", root.runtimeStatePath, "install", url, root.installExpectedJobId, root.reviewRepository.commit])
     } catch (e) {
       root.installDetachedRunning = false
       root.installRunning = false
@@ -2570,6 +2582,7 @@ Panel {
         : root.reviewVerificationStatus() === "Unable to check" ? "Could not confirm whether the repository matches the verified Marketplace code."
         : ""
       confirmEnabled: !reviewProcess.running && !root.marketplaceFetching
+        && /^[0-9a-f]{40}$/.test(String(root.reviewRepository.commit || ""))
       pluginDescription: root.installReviewEntry() ? String(root.installReviewEntry().description || "") : ""
       pluginIcon: root.installReviewEntry() ? String(root.installReviewEntry().icon || "") : ""
       marketplaceListed: root.installReviewEntry() !== null
