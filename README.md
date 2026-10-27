@@ -70,6 +70,20 @@ Omaplug is listed on the marketplace: [plugins.omarchy.org/plugin.html?id=omaplu
 
 Open Omaplug from the bar and choose **Arrange bar layout**. Drag any bar widget into the **Plugin Folder** column to move its icon into the dropdown at the right end of the bar. The widget stays enabled and its normal controls remain available from the dropdown. Drag it back to a bar section to restore its standalone icon. The dropdown itself requires a bar implementation that reads `bar.pluginFolder.widgets` from `shell.json`.
 
+## Fork attribution
+
+Forks that keep their own repository URL can still credit the upstream project. Add an optional `basedOn` object to the plugin's `manifest.json`:
+
+```json
+"author": "Mystical89",
+"basedOn": {
+  "author": "AlexMedela",
+  "url": "https://github.com/AlexMedela/simple-sysstats"
+}
+```
+
+The row then reads `by Mystical89 ↗ · based on AlexMedela ↗`: the first link opens the fork owner on GitHub, the second opens the upstream repository. `basedOn.url` is only linkified when it is an `https://github.com/<owner>/<repo>` URL. Without `basedOn`, the row is unchanged.
+
 ## Install
 
 ```bash

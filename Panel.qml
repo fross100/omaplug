@@ -587,6 +587,7 @@ Panel {
       || String(p.description || "").toLowerCase().indexOf(q) !== -1
       || String(p.id || "").toLowerCase().indexOf(q) !== -1
       || String(p.author || "").toLowerCase().indexOf(q) !== -1
+      || String(p.basedOnAuthor || "").toLowerCase().indexOf(q) !== -1
       || String(p.kinds || "").toLowerCase().indexOf(q) !== -1
   })
 
@@ -1126,6 +1127,8 @@ Panel {
         version: row.version !== "unknown" ? row.version : (item.version || "unknown"),
         author: row.author || item.author || "",
         description: row.description || item.description || "",
+        basedOnAuthor: row.basedOnAuthor || "",
+        basedOnUrl: row.basedOnUrl || "",
         kinds: row.kinds,
         canDisable: row.canDisable,
         firstParty: row.firstParty,
@@ -1556,6 +1559,8 @@ Panel {
         version: "unknown",
         author: "",
         description: "",
+        basedOnAuthor: "",
+        basedOnUrl: "",
         kinds: kinds.join(", "),
         canDisable: !isBarOption,
         firstParty: m.firstParty === true,
@@ -1579,11 +1584,21 @@ Panel {
       + "firstParty=false; [[ \"$base\" == \"$0/shell/plugins\" ]] && firstParty=true; "
       + "find -L \"$base\" -maxdepth 4 -type f '(' -name manifest.json -o -name '*.manifest.json' ')' -print0 "
       + "| while IFS= read -r -d '' file; do jq -c --argjson firstParty \"$firstParty\" "
-      + "'{id,name,version,author,description,kinds,firstParty:$firstParty}' \"$file\"; done; "
+      + "'{id,name,version,author,description,kinds,firstParty:$firstParty,basedOn:(.basedOn // null)}' \"$file\"; done; "
       + "done",
       Quickshell.env("OMARCHY_PATH")]
     root.pluginManifestProcess.running = true
     root.scanPluginRepos()
+  }
+
+  // Optional fork attribution: { "author": "...", "url": "https://github.com/..." }.
+  function basedOnFields(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return { basedOnAuthor: "", basedOnUrl: "" }
+    return {
+      basedOnAuthor: typeof value.author === "string" ? value.author.trim().slice(0, 128) : "",
+      basedOnUrl: typeof value.url === "string" ? value.url.trim().slice(0, 512) : ""
+    }
   }
 
   function applyPluginMetadata(text) {
@@ -1600,12 +1615,15 @@ Panel {
       for (var id in metadata) {
         var fallback = metadata[id]
         var fallbackKinds = Array.isArray(fallback.kinds) ? fallback.kinds : []
+        var fallbackBasedOn = root.basedOnFields(fallback.basedOn)
         rows.push({
           id: id,
           name: fallback.name || id,
           version: fallback.version || "unknown",
           author: fallback.author || "",
           description: fallback.description || "",
+          basedOnAuthor: fallbackBasedOn.basedOnAuthor,
+          basedOnUrl: fallbackBasedOn.basedOnUrl,
           kinds: fallbackKinds.join(", "),
           canDisable: fallbackKinds.indexOf("bar") === -1,
           firstParty: fallback.firstParty === true,
@@ -1623,12 +1641,15 @@ Panel {
         rows.push(row)
         continue
       }
+      var basedOn = root.basedOnFields(item.basedOn)
       rows.push({
         id: row.id,
         name: item.name || row.name,
         version: item.version || row.version,
         author: item.author || row.author,
         description: item.description || row.description,
+        basedOnAuthor: basedOn.basedOnAuthor || row.basedOnAuthor || "",
+        basedOnUrl: basedOn.basedOnUrl || row.basedOnUrl || "",
         kinds: Array.isArray(item.kinds) ? item.kinds.join(", ") : row.kinds,
         canDisable: row.canDisable,
         firstParty: row.firstParty,
