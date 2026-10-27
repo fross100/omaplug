@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 // Bar-layout board: the bar sections plus a plugin-folder drop target. Drag a
@@ -125,7 +126,7 @@ Item {
         tooltipText: "Back to plugin list"
         bordered: true
         foreground: board.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: board.fontFamily
         fontSize: Style.font.bodySmall
         horizontalPadding: Style.space(10)
@@ -178,10 +179,10 @@ Item {
             Layout.fillHeight: true
             radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
             color: column.isDropColumn
-              ? Util.alpha(Color.accent, 0.08)
+              ? Util.alpha(Commons.Color.accent, 0.08)
               : Util.alpha(board.foreground, 0.04)
             border.color: column.isDropColumn
-              ? Util.alpha(Color.accent, 0.5)
+              ? Util.alpha(Commons.Color.accent, 0.5)
               : Util.alpha(board.foreground, 0.12)
             border.width: 1
 
@@ -241,10 +242,10 @@ Item {
                   anchors.fill: parent
                   radius: height / 2
                   color: chip.isDragged
-                    ? Util.alpha(Color.accent, 0.25)
-                    : Style.normalFillFor(board.foreground, Color.accent)
+                    ? Util.alpha(Commons.Color.accent, 0.25)
+                    : Style.normalFillFor(board.foreground, Commons.Color.accent)
                   border.color: chip.isDragged
-                    ? Color.accent
+                    ? Commons.Color.accent
                     : Util.alpha(board.foreground, 0.15)
                   border.width: 1
                   opacity: chip.isDragged ? 0.55 : 1.0
@@ -334,7 +335,7 @@ Item {
                   anchors.right: parent.right
                   height: Style.space(3)
                   radius: height / 2
-                  color: Color.accent
+                  color: Commons.Color.accent
                 }
 
                 Rectangle {
@@ -345,7 +346,7 @@ Item {
                   anchors.right: parent.right
                   height: Style.space(3)
                   radius: height / 2
-                  color: Color.accent
+                  color: Commons.Color.accent
                 }
               }
 
@@ -377,8 +378,8 @@ Item {
     width: Math.min(Style.space(200), board.width / 4 - Style.space(16))
     height: Style.space(34)
     radius: height / 2
-    color: Util.alpha(Color.accent, 0.85)
-    border.color: Color.accent
+    color: Util.alpha(Commons.Color.accent, 0.85)
+    border.color: Commons.Color.accent
     border.width: 1
     x: board.ghostX - width / 2
     y: board.ghostY - height / 2
@@ -393,7 +394,7 @@ Item {
       maximumLineCount: 1
       text: board.dragName
       textFormat: Text.PlainText
-      color: Color.background
+      color: Commons.Color.background
       font.family: board.fontFamily
       font.pixelSize: Style.font.caption
       font.bold: true

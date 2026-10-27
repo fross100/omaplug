@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 BarWidget {
@@ -89,7 +90,7 @@ BarWidget {
         implicitWidth: Math.max(Style.space(14), badgeLabel.implicitWidth + Style.space(6))
         implicitHeight: Style.space(14)
         radius: height / 2
-        color: Color.accent
+        color: Commons.Color.accent
         border.width: 1
         border.color: root.bar ? root.bar.background : "transparent"
 

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "../Presentation.js" as Presentation
 
@@ -58,7 +59,7 @@ Item {
     clip: true
     radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
     color: hover.hovered
-      ? Style.hoverFillFor(pluginRow.foreground, Color.accent)
+      ? Style.hoverFillFor(pluginRow.foreground, Commons.Color.accent)
       : "transparent"
 
     RowLayout {
@@ -78,7 +79,7 @@ Item {
         enabled: !pluginRow.removingPlugin
         Layout.alignment: Qt.AlignVCenter
         foreground: pluginRow.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: pluginRow.fontFamily
         fontSize: Style.font.bodySmall
         horizontalPadding: Style.space(6)
@@ -114,7 +115,7 @@ Item {
           width: 8
           height: 8
           radius: 4
-          color: Color.accent
+          color: Commons.Color.accent
           border.color: pluginRow.foreground
           border.width: 1
           z: 1
@@ -178,7 +179,7 @@ Item {
             color: pluginRow.updateUnverified
               ? Qt.rgba(0.85, 0.65, 0.13, 0.18)
               : pluginRow.verified
-                ? Util.alpha(Color.accent, 0.18)
+                ? Util.alpha(Commons.Color.accent, 0.18)
               : Qt.rgba(pluginRow.foreground.r, pluginRow.foreground.g, pluginRow.foreground.b, 0.08)
 
             Row {
@@ -190,7 +191,7 @@ Item {
                 visible: pluginRow.verified && !pluginRow.updateUnverified && !pluginRow.marketplaceUnavailable
                 text: "\uf058"
                 textFormat: Text.PlainText
-                color: Color.accent
+                color: Commons.Color.accent
                 font.family: pluginRow.fontFamily
                 font.pixelSize: Style.font.caption - 1
                 anchors.verticalCenter: parent.verticalCenter
@@ -210,7 +211,7 @@ Item {
                 text: pluginRow.marketplaceUnavailable ? "Unavailable" : pluginRow.updateUnverified ? "Update Unverified" : pluginRow.verified ? "Verified" : "Unverified"
                 textFormat: Text.PlainText
                 color: pluginRow.updateUnverified ? Qt.hsla(0.12, 0.75, 0.55, 1)
-                  : pluginRow.verified ? Color.accent
+                  : pluginRow.verified ? Commons.Color.accent
                   : Qt.darker(pluginRow.foreground, 2.0)
                 font.family: pluginRow.fontFamily
                 font.pixelSize: Style.font.caption - 1
@@ -267,7 +268,7 @@ Item {
             Layout.minimumWidth: 0
             elide: Text.ElideRight
             textFormat: Text.PlainText
-            color: pluginRow.authorUrl !== "" ? Color.accent : Qt.darker(pluginRow.foreground, 2.0)
+            color: pluginRow.authorUrl !== "" ? Commons.Color.accent : Qt.darker(pluginRow.foreground, 2.0)
             font.family: pluginRow.fontFamily
             font.pixelSize: Style.font.caption
             font.underline: authorHover.hovered && pluginRow.authorUrl !== ""

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Rectangle {
@@ -46,7 +47,7 @@ Rectangle {
     height: content.implicitHeight + Style.space(36)
     color: dialog.panelBackground
     radius: Style.cornerRadius
-    border.color: Style.selectedStateColor(dialog.foreground, Color.accent)
+    border.color: Style.selectedStateColor(dialog.foreground, Commons.Color.accent)
     border.width: 1
 
     ColumnLayout {
@@ -83,7 +84,7 @@ Rectangle {
         placeholderText: "Paste a GitHub plugin link"
         placeholderTextColor: Util.alpha(dialog.foreground, 0.45)
         foreground: dialog.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         font.family: dialog.fontFamily
         Layout.fillWidth: true
         onAccepted: {
@@ -97,8 +98,8 @@ Rectangle {
         text: dialog.result
         textFormat: Text.PlainText
         color: dialog.running ? dialog.foreground
-          : (dialog.failed ? Color.urgent
-            : Style.selectedStateColor(dialog.foreground, Color.accent))
+          : (dialog.failed ? Commons.Color.urgent
+            : Style.selectedStateColor(dialog.foreground, Commons.Color.accent))
         font.family: dialog.fontFamily
         font.pixelSize: Style.font.caption
         Layout.fillWidth: true
@@ -116,7 +117,7 @@ Rectangle {
           text: dialog.result !== "" ? "Close" : "Cancel"
           enabled: !dialog.running
           foreground: dialog.foreground
-          accent: Color.accent
+          accent: Commons.Color.accent
           fontFamily: dialog.fontFamily
           fontSize: Style.font.bodySmall
           horizontalPadding: Style.space(12)
@@ -130,7 +131,7 @@ Rectangle {
           text: dialog.running ? "Installing…" : "Review"
           enabled: !dialog.running
           foreground: dialog.foreground
-          accent: Color.accent
+          accent: Commons.Color.accent
           fontFamily: dialog.fontFamily
           fontSize: Style.font.bodySmall
           horizontalPadding: Style.space(12)

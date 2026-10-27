@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Item {
@@ -59,7 +60,7 @@ Item {
       Button {
         text: "Back"
         foreground: page.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: page.fontFamily
         fontSize: Style.font.bodySmall
         onClicked: page.closeRequested()
@@ -73,7 +74,7 @@ Item {
       checked: page.menuEnabled
       enabled: !page.menuBusy
       foreground: page.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: page.fontFamily
       onClicked: page.menuEnabledRequested(!page.menuEnabled)
     }
@@ -94,7 +95,7 @@ Item {
       checked: page.autoCheckEnabled
       enabled: !page.settingsBusy
       foreground: page.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: page.fontFamily
       onClicked: page.autoCheckEnabledRequested(!page.autoCheckEnabled)
     }
@@ -106,7 +107,7 @@ Item {
       })
       value: String(page.autoCheckIntervalHours)
       foreground: page.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: page.fontFamily
       fontSize: Style.font.caption
       onChanged: function(value) { page.autoCheckIntervalRequested(Number(value)) }
@@ -125,7 +126,7 @@ Item {
       foreground: page.foreground
       background: page.panelBackground
       popupBorder: Util.alpha(page.foreground, 0.2)
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: page.fontFamily
       onChanged: function(value) { page.bulkUpdateScopeRequested(value) }
     }
@@ -152,7 +153,7 @@ Item {
       Button {
         text: "Release notes"
         foreground: page.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: page.fontFamily
         fontSize: Style.font.caption
         onClicked: page.openUrlRequested("https://github.com/fross100/omaplug/releases/tag/v" + encodeURIComponent(page.pluginVersion))
