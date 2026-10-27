@@ -300,7 +300,7 @@ Item {
             Layout.minimumWidth: 0
             elide: Text.ElideRight
             textFormat: Text.PlainText
-            color: Color.accent
+            color: Commons.Color.accent
             font.family: pluginRow.fontFamily
             font.pixelSize: Style.font.caption
             font.underline: basedOnHover.hovered

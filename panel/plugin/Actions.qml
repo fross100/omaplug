@@ -103,9 +103,9 @@ ColumnLayout {
       text: "OPEN"
       bordered: true
       borderSpec: openButton.hot ? Border.none()
-        : Border.controlSpec("normal", openButton.foreground, Color.accent)
+        : Border.controlSpec("normal", openButton.foreground, Commons.Color.accent)
       foreground: actions.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: actions.fontFamily
       fontSize: Style.font.caption
       iconSize: Style.font.caption

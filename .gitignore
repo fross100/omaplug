@@ -7,3 +7,6 @@ Plugin Manager v1.2.0.md
 /RELEASE_NOTES_1.5.1.md
 
 /omarchy-plugin-verify-security-review-public.md
+
+# Python bytecode
+__pycache__/
