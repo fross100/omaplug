@@ -161,6 +161,10 @@ Item {
           readonly property bool isDropColumn: board.dragId !== "" && board.dropSection === column.section
 
           Layout.fillWidth: true
+          // fillWidth alone only splits the spare space, so the longer folder
+          // header would otherwise make that column wider than the rest.
+          Layout.preferredWidth: 0
+          Layout.minimumWidth: 0
           Layout.fillHeight: true
           spacing: Style.space(6)
 
@@ -170,6 +174,7 @@ Item {
             font.family: board.fontFamily
             font.pixelSize: Style.font.caption
             font.bold: true
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignHCenter
             Layout.fillWidth: true
           }
