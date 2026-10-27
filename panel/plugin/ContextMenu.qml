@@ -135,11 +135,9 @@ Rectangle {
         }
       }
 
-      // Bar-widget placement. Only visible for widgets currently on the bar;
-      // the widget's own section is marked and disabled so the menu shows
-      // where the widget lives now.
+      // Bar-widget placement, including the plugin-folder dropdown.
       Repeater {
-        model: menu.canMove ? ["left", "center", "right"] : []
+        model: menu.canMove ? ["left", "center", "right", "folder"] : []
 
         Button {
           required property string modelData
@@ -147,7 +145,8 @@ Rectangle {
           readonly property bool isCurrent: menu.currentSection === modelData
 
           visible: menu.canMove
-          text: (isCurrent ? "● " : "") + "Move to " + modelData
+          text: (isCurrent ? "● " : "") + "Move to "
+            + (modelData === "folder" ? "Plugin Folder" : modelData)
           enabled: !isCurrent
           opacity: isCurrent ? 0.55 : 1.0
           foreground: menu.foreground

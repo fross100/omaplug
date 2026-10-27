@@ -6,10 +6,9 @@ import QtQuick.Layouts
 import qs.Commons
 import qs.Ui
 
-// Bar-layout board: the three bar sections side by side, each showing its
-// widgets in live order. Drag a chip within a column to reorder, or across
-// columns to move sections. Every drop calls back with (id, section, index)
-// and the owner applies it with `omarchy bar move`, so the bar follows.
+// Bar-layout board: the bar sections plus a plugin-folder drop target. Drag a
+// chip to reorder, move sections, or tuck it into the dropdown folder.
+// Every drop calls back with (id, section, index) and the owner applies it.
 //
 // Interaction notes:
 // - The dragged chip stays in place as a dimmed placeholder; a thin accent
@@ -45,7 +44,7 @@ Item {
     if (board.dragId !== "") board.cancelDrag()
   }
 
-  // Active drag state, shared across the three columns.
+  // Active drag state, shared across the columns.
   property string dragId: ""
   property string dragName: ""
   property string dragFromSection: ""
@@ -116,7 +115,7 @@ Item {
         text: "Bar Layout"
         color: board.foreground
         font.family: board.fontFamily
-        font.pixelSize: Style.font.body
+        font.pixelSize: Style.font.bodySmall
         font.bold: true
         Layout.fillWidth: true
       }
@@ -136,11 +135,11 @@ Item {
     }
 
     Label {
-      text: "Drag a widget to reorder — within its section or across sections."
+      text: "Drag widgets between bar sections, or into PLUGIN FOLDER to keep them active in the dropdown."
       textFormat: Text.PlainText
       color: Qt.darker(board.foreground, 1.5)
       font.family: board.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.caption
       Layout.fillWidth: true
     }
 
@@ -165,7 +164,7 @@ Item {
           spacing: Style.space(6)
 
           Label {
-            text: column.section.toUpperCase()
+            text: column.section === "folder" ? "📁 🧩 PLUGIN FOLDER" : column.section.toUpperCase()
             color: board.foreground
             font.family: board.fontFamily
             font.pixelSize: Style.font.caption
@@ -186,6 +185,18 @@ Item {
               : Util.alpha(board.foreground, 0.12)
             border.width: 1
 
+            Label {
+              visible: column.section === "folder" && column.entries.length === 0
+              anchors.centerIn: parent
+              width: parent.width - Style.space(20)
+              text: "Drop widgets here\nto add them to the bar dropdown"
+              color: Qt.darker(board.foreground, 1.5)
+              font.family: board.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.WordWrap
+            }
+
             ListView {
               id: sectionList
               anchors.fill: parent
@@ -198,6 +209,7 @@ Item {
               currentIndex: -1
               highlight: null
               keyNavigationEnabled: false
+              z: 1
 
               Component.onCompleted: board.registerList(column.section, sectionList)
 
@@ -258,7 +270,7 @@ Item {
                       maximumLineCount: 1
                       color: board.foreground
                       font.family: board.fontFamily
-                      font.pixelSize: Style.font.bodySmall
+                      font.pixelSize: Style.font.caption
                       Layout.fillWidth: true
                       Layout.alignment: Qt.AlignVCenter
                     }
@@ -362,7 +374,7 @@ Item {
   Rectangle {
     id: ghost
     visible: board.dragId !== ""
-    width: Math.min(Style.space(200), board.width / 3 - Style.space(16))
+    width: Math.min(Style.space(200), board.width / 4 - Style.space(16))
     height: Style.space(34)
     radius: height / 2
     color: Util.alpha(Color.accent, 0.85)
@@ -383,14 +395,14 @@ Item {
       textFormat: Text.PlainText
       color: Color.background
       font.family: board.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.caption
       font.bold: true
     }
   }
 
   function updateDropTarget(x, y) {
     if (board.dragId === "") return
-    var names = ["left", "center", "right"]
+    var names = ["left", "center", "right", "folder"]
     for (var i = 0; i < names.length; i++) {
       var list = board._lists[names[i]]
       if (!list) continue

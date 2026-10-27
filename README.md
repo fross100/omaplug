@@ -66,6 +66,10 @@ Omaplug is listed on the marketplace: [plugins.omarchy.org/plugin.html?id=omaplu
 - **🔍 Search & filter** — narrow the list to Omarchy plugins, third-party plugins, or search by name, description, ID, author, or kind.
 - **♻️ Restart shell** — if a plugin ever acts up from stale compiled code, one button clears the QML cache and restarts the shell so everything reloads fresh.
 
+## Bar plugin folder
+
+Open Omaplug from the bar and choose **Arrange bar layout**. Drag any bar widget into the **Plugin Folder** column to move its icon into the dropdown at the right end of the bar. The widget stays enabled and its normal controls remain available from the dropdown. Drag it back to a bar section to restore its standalone icon. The dropdown itself requires a bar implementation that reads `bar.pluginFolder.widgets` from `shell.json`.
+
 ## Install
 
 ```bash

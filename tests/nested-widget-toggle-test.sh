@@ -9,6 +9,8 @@ TASK_DIR=$(mktemp -d)
 trap 'rm -rf -- "$TASK_DIR"' EXIT
 export CALL_LOG="$TASK_DIR/calls"
 export CONFIG BAR_FAIL=0
+export XDG_CONFIG_HOME="$TASK_DIR/config"
+mkdir -p "$XDG_CONFIG_HOME/omarchy"
 
 # Executable stubs also intercept the helper's final exec command.
 omarchy-shell() {
@@ -70,6 +72,18 @@ check 'host update error propagates' test "$result" -eq 42
 check 'failed host update prevents plugin disable' jq -se '
   . == [["bar","set","host","widgets","[\"other\"]","--json"]]
 ' "$CALL_LOG"
+
+CONFIG='{"bar":{"layout":{},"pluginFolder":{"widgets":["folder-child"]}}}'
+printf '%s\n' "$CONFIG" > "$XDG_CONFIG_HOME/omarchy/shell.json"
+BAR_FAIL=0
+run_helper folder-child disable
+check 'folder disable succeeds' test "$result" -eq 0
+check 'folder entry is removed before plugin disable' jq -se '
+  . == [["plugin","disable","folder-child"]]
+' "$CALL_LOG"
+check 'folder config no longer includes disabled plugin' jq -e '
+  .bar.pluginFolder.widgets == []
+' "$XDG_CONFIG_HOME/omarchy/shell.json"
 
 (( failures == 0 )) || exit 1
 

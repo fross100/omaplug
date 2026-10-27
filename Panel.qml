@@ -1511,7 +1511,7 @@ Panel {
   function applyPluginConfig(text) {
     var config = {}
     try { config = JSON.parse(String(text || "{}")) } catch (e) { return }
-    var nested = {}
+    var nested = Object.create(null)
     var layout = config.bar && config.bar.layout ? config.bar.layout : {}
     for (var section in layout) {
       var entries = Array.isArray(layout[section]) ? layout[section] : []
@@ -1519,6 +1519,13 @@ Panel {
         var widgets = entries[i] && Array.isArray(entries[i].widgets) ? entries[i].widgets : []
         for (var j = 0; j < widgets.length; j++) nested[String(widgets[j])] = true
       }
+    }
+    var folderWidgets = config.bar && config.bar.pluginFolder
+      && Array.isArray(config.bar.pluginFolder.widgets) ? config.bar.pluginFolder.widgets : []
+    for (var k = 0; k < folderWidgets.length; k++) {
+      var folderId = folderWidgets[k] && typeof folderWidgets[k] === "object"
+        ? folderWidgets[k].id : folderWidgets[k]
+      if (folderId) nested[String(folderId)] = true
     }
     root.nestedWidgetIds = nested
   }
@@ -1660,7 +1667,7 @@ Panel {
   // drives enable/disable through `omarchy plugin …` subprocesses, so move
   // follows the same pattern with `omarchy bar move` instead of touching
   // the shell registry (which user panels no longer reach).
-  property var barLayoutCache: ({ left: [], center: [], right: [] })
+  property var barLayoutCache: ({ left: [], center: [], right: [], folder: [] })
   property Process barLayoutProcess: Process {
     onExited: function(exitCode) {
       if (exitCode === 0) root.applyBarLayout(barLayoutStdout.text)
@@ -1688,6 +1695,19 @@ Panel {
     }
   }
   property string movePending: ""
+  property string folderLayoutHelperPath: ""
+
+  property Process folderMoveProcess: Process {
+    onExited: function(exitCode) {
+      var err = String(folderMoveStdout.text || "").trim()
+      if (exitCode !== 0) root.moveSummary = "Move failed" + (err ? ": " + err : "")
+      else if (root.movePending !== "") root.moveSummary = "Moved " + root.movePending + "."
+      root.movePending = ""
+      root.refreshBarLayout()
+      root.refreshPlugins()
+    }
+    stdout: StdioCollector { id: folderMoveStdout; waitForEnd: true }
+  }
 
   function refreshBarLayout() {
     if (root.barLayoutProcess.running) return
@@ -1704,7 +1724,7 @@ Panel {
       return
     }
     var layout = config && config.bar ? config.bar.layout : null
-    var next = { left: [], center: [], right: [] }
+    var next = { left: [], center: [], right: [], folder: [] }
     var sections = ["left", "center", "right"]
     for (var s = 0; s < sections.length; s++) {
       var entries = layout && Array.isArray(layout[sections[s]]) ? layout[sections[s]] : []
@@ -1716,13 +1736,20 @@ Panel {
       }
       next[sections[s]] = ids
     }
+    var folder = config && config.bar && config.bar.pluginFolder
+      && Array.isArray(config.bar.pluginFolder.widgets) ? config.bar.pluginFolder.widgets : []
+    for (var f = 0; f < folder.length; f++) {
+      var entry = folder[f]
+      var id = entry && typeof entry === "object" ? entry.id : entry
+      if (id) next.folder.push(String(id))
+    }
     root.barLayoutCache = next
   }
 
   // Move state for the row-menu "Move to" actions. Only bar-widgets that are
   // currently on the bar can move; anything else hides the menu entries.
   function barSectionFor(id) {
-    var sections = ["left", "center", "right"]
+    var sections = ["left", "center", "right", "folder"]
     for (var s = 0; s < sections.length; s++) {
       var ids = root.barLayoutCache[sections[s]] || []
       if (ids.indexOf(String(id)) !== -1) return sections[s]
@@ -1748,8 +1775,13 @@ Panel {
   }
 
   function moveWidgetToSection(id, section) {
-    if (["left", "center", "right"].indexOf(section) === -1) return
-    if (root.barMoveProcess.running) return
+    if (["left", "center", "right", "folder"].indexOf(section) === -1) return
+    if (section === "folder" || root.barSectionFor(id) === "folder") {
+      var targetIndex = section === "folder" ? (root.barLayoutCache.folder || []).length : 0
+      root.moveWidgetToPosition(id, section, targetIndex)
+      return
+    }
+    if (root.barMoveProcess.running || root.folderMoveProcess.running) return
     if (root.barSectionFor(id) === section) return
     root.keepOpenAcrossRebuild()
     root.movePending = id + " to " + section
@@ -1759,12 +1791,17 @@ Panel {
   }
 
   function moveWidgetToPosition(id, section, index) {
-    if (["left", "center", "right"].indexOf(section) === -1) return
-    if (root.barMoveProcess.running) return
+    if (["left", "center", "right", "folder"].indexOf(section) === -1) return
+    if (root.barMoveProcess.running || root.folderMoveProcess.running) return
     root.keepOpenAcrossRebuild()
     var target = Math.max(0, Math.floor(Number(index) || 0))
     root.movePending = id + " to " + section
     root.moveSummary = "Moving " + id + "…"
+    if (section === "folder" || root.barSectionFor(id) === "folder") {
+      root.folderMoveProcess.command = ["python3", root.folderLayoutHelperPath, id, section, String(target)]
+      root.folderMoveProcess.running = true
+      return
+    }
     root.barMoveProcess.command = ["omarchy", "bar", "move", id, "--section", section, "--index", String(target)]
     root.barMoveProcess.running = true
   }
@@ -1772,7 +1809,7 @@ Panel {
   // Live bar layout grouped per section for the layout board.
   function layoutSections() {
     var out = []
-    var sections = ["left", "center", "right"]
+    var sections = ["left", "center", "right", "folder"]
     for (var s = 0; s < sections.length; s++) {
       var ids = root.barLayoutCache[sections[s]] || []
       var items = []
@@ -1789,6 +1826,7 @@ Panel {
     root.marketplaceHelperPath = String(Qt.resolvedUrl("marketplace-catalog.sh")).replace(/^file:\/\//, "")
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
+    root.folderLayoutHelperPath = String(Qt.resolvedUrl("plugin-folder-layout.py")).replace(/^file:\/\//, "")
     root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
     fetchMarketplace()
@@ -1912,7 +1950,9 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(560))
+    // Four drop columns need more room, while the fitted width remains capped
+    // by the available screen width in KeyboardPanel.
+    contentWidth: panel.fittedContentWidth(Style.space(700))
     contentHeight: panel.fittedContentHeight(Style.space(720))
 
     // ------------------------------------------------------------------- content
