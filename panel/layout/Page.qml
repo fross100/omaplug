@@ -136,8 +136,9 @@ Item {
     }
 
     Label {
-      text: "Drag widgets between bar sections, or into PLUGIN FOLDER to keep them active in the dropdown."
+      text: "Arrange plugin icons on the left, center, or right of the bar. Drag one into Plugin Folder to hide its icon while keeping it enabled; set a custom keyboard shortcut on the main page to access plugins that support shortcuts."
       textFormat: Text.PlainText
+      wrapMode: Text.WordWrap
       color: Qt.darker(board.foreground, 1.5)
       font.family: board.fontFamily
       font.pixelSize: Style.font.caption
