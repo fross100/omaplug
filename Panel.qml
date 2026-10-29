@@ -1512,9 +1512,20 @@ Panel {
     }
   }
 
+  function parseCommandJson(text) {
+    var output = String(text || "")
+    var lines = output.split(/\r?\n/)
+    for (var i = 0; i < lines.length; i++) {
+      if (/^[\[{]/.test(lines[i].trim()))
+        return JSON.parse(lines.slice(i).join("\n"))
+    }
+    return JSON.parse(output)
+  }
+
   function applyPluginConfig(text) {
     var config = {}
-    try { config = JSON.parse(String(text || "{}")) } catch (e) { return }
+    try { config = root.parseCommandJson(text || "{}") }
+    catch (e) { console.warn("Could not parse omarchy shell config:", e); return }
     var nested = Object.create(null)
     var layout = config.bar && config.bar.layout ? config.bar.layout : {}
     for (var section in layout) {
@@ -1536,7 +1547,7 @@ Panel {
 
   function applyPluginList(text) {
     var catalog
-    try { catalog = JSON.parse(String(text || "")) }
+    try { catalog = root.parseCommandJson(text) }
     catch (e) {
       console.warn("Could not parse omarchy plugin list:", e)
       pluginRows = []

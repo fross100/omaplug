@@ -17,7 +17,7 @@ try {
   context.Presentation = vm.createContext({});
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../panel/Presentation.js'), 'utf8')
     .replace(/^\.pragma library\s*/, ''), context.Presentation);
-  for (const name of ['applyPluginList', 'applyPluginMetadata', 'mergeMarketplaceMetadata', 'applyMarketplaceCatalog', 'basedOnFields']) {
+  for (const name of ['parseCommandJson', 'applyPluginList', 'applyPluginMetadata', 'mergeMarketplaceMetadata', 'applyMarketplaceCatalog', 'basedOnFields']) {
     const start = source.indexOf('  function ' + name + '(');
     assert.notEqual(start, -1);
     const end = source.indexOf('\n  }', start) + 4;

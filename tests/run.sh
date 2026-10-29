@@ -9,6 +9,7 @@ ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 "$ROOT/quickshell-detached-test.sh"
 bash "$ROOT/verification-status-test.sh"
 node "$ROOT/plugin-metadata-test.cjs"
+node "$ROOT/command-json-test.cjs"
 node "$ROOT/presentation-links-test.cjs"
 node "$ROOT/bulk-update-scope-test.cjs"
 "$ROOT/auto-check-test.sh"
