@@ -35,6 +35,25 @@ class StateSafety(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.victim.read_text(), "keep me")
 
+    def test_reopen_view_keeps_only_known_fields(self):
+        state = str(ROOT / "runtime-state.py")
+        view = '{"scrollY": 340, "searchText": "clock", "filterMode": 0, "filterKind": 7, "extra": "x"}'
+        self.assertEqual(self.run_helper("python3", state, "reopen-write", "main", view).returncode, 0)
+        result = self.run_helper("python3", state, "reopen-read")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout.decode().splitlines(), ["main", '{"scrollY": 340, "searchText": "clock", "filterMode": 0}'])
+
+    def test_reopen_survives_a_bad_view(self):
+        state = str(ROOT / "runtime-state.py")
+        self.assertEqual(self.run_helper("python3", state, "reopen-write", "layout", "not json").returncode, 0)
+        result = self.run_helper("python3", state, "reopen-read")
+        self.assertEqual(result.stdout.decode().splitlines(), ["layout", "{}"])
+
+    def test_reopen_without_a_view(self):
+        state = str(ROOT / "runtime-state.py")
+        self.assertEqual(self.run_helper("python3", state, "reopen-write", "main").returncode, 0)
+        self.assertEqual(self.run_helper("python3", state, "reopen-read").stdout.decode().splitlines(), ["main", "{}"])
+
 
 if __name__ == "__main__":
     unittest.main()
