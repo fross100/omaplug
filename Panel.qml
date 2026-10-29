@@ -1877,7 +1877,13 @@ Panel {
   // rebuild, and the shell object rejects dynamic properties.
   function keepOpenAcrossRebuild() {
     keepOpenFlagWrite.command = ["python3", root.runtimeStatePath, "reopen-write",
-      root.layoutPageOpen ? "layout" : "main"]
+      root.layoutPageOpen ? "layout" : "main",
+      JSON.stringify({
+        scrollY: pluginList.contentY,
+        searchText: root.searchText,
+        filterMode: root.filterMode,
+        filterKind: root.filterKind
+      })]
     keepOpenFlagWrite.running = true
   }
 
@@ -1895,10 +1901,18 @@ Panel {
     onExited: function(exitCode) {
       if (exitCode === 0) {
         keepOpenRetries = 0
-        var restoreLayout = String(keepOpenState.text).trim() === "layout"
+        var lines = String(keepOpenState.text).split("\n")
+        var restoreLayout = lines[0].trim() === "layout"
+        var view = {}
+        try { view = JSON.parse(lines[1] || "{}") } catch (e) {}
         Qt.callLater(function() {
+          if (typeof view.filterMode === "number") root.filterMode = view.filterMode
+          if (typeof view.filterKind === "string") root.filterKind = view.filterKind
+          if (typeof view.searchText === "string") root.searchText = view.searchText
+          root.pendingScrollY = typeof view.scrollY === "number" ? view.scrollY : -1
           root.open()
           root.layoutPageOpen = restoreLayout
+          scrollRestore.restart()
         })
       } else if (keepOpenRetries < 4) {
         // The flag write races the rebuild: the fresh instance can load
@@ -1910,6 +1924,26 @@ Panel {
   }
 
   property int keepOpenRetries: 0
+  property real pendingScrollY: -1
+
+  // The list fills asynchronously after a rebuild, so retry until it is tall
+  // enough to hold the saved scroll offset.
+  Timer {
+    id: scrollRestore
+    interval: 120
+    repeat: true
+    property int tries: 0
+    onTriggered: {
+      if (root.pendingScrollY < 0) { stop(); return }
+      var max = Math.max(0, pluginList.contentHeight - pluginList.height)
+      if (pluginList.count > 0 && (max >= root.pendingScrollY || tries >= 15)) {
+        pluginList.contentY = Math.min(root.pendingScrollY, max)
+        root.pendingScrollY = -1
+        tries = 0
+        stop()
+      } else tries++
+    }
+  }
 
   Timer {
     id: keepOpenRetry
