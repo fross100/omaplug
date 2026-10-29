@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Rectangle {
@@ -19,9 +20,9 @@ Rectangle {
 
   property bool dismissEnabled: true
   property real maximumWidth: Style.space(360)
-  property color borderColor: Style.selectedStateColor(foreground, Color.accent)
+  property color borderColor: Style.selectedStateColor(foreground, Commons.Color.accent)
   property color confirmForeground: foreground
-  property color confirmAccent: Color.accent
+  property color confirmAccent: Commons.Color.accent
   property bool confirmBordered: false
   property int titleWrapMode: Text.NoWrap
   property string pluginName: ""
@@ -104,11 +105,11 @@ Rectangle {
           Layout.preferredWidth: Style.space(36)
           Layout.preferredHeight: Style.space(36)
           radius: Style.cornerRadius
-          color: Util.alpha(Color.accent, 0.8)
+          color: Util.alpha(Commons.Color.accent, 0.8)
           Text {
             anchors.centerIn: parent
             text: dialog.pluginIcon || dialog.pluginName.trim().charAt(0).toUpperCase()
-            color: Color.background
+            color: Commons.Color.background
             font.family: dialog.fontFamily
             font.pixelSize: Style.font.title
           }
@@ -143,7 +144,7 @@ Rectangle {
               implicitHeight: Style.space(16)
               radius: height / 2
               color: dialog.marketplaceStatus === "Verified on marketplace"
-                ? Util.alpha(Color.accent, 0.18)
+                ? Util.alpha(Commons.Color.accent, 0.18)
                 : dialog.marketplaceStatus === "Update Unverified"
                   ? Qt.rgba(0.85, 0.65, 0.13, 0.18)
                   : Util.alpha(dialog.foreground, 0.08)
@@ -154,7 +155,7 @@ Rectangle {
                 Text {
                   visible: dialog.marketplaceStatus === "Verified on marketplace" || dialog.marketplaceStatus === "Update Unverified"
                   text: dialog.marketplaceStatus === "Update Unverified" ? "\uf071" : "\uf058"
-                  color: dialog.marketplaceStatus === "Update Unverified" ? Qt.hsla(0.12, 0.75, 0.55, 1) : Color.accent
+                  color: dialog.marketplaceStatus === "Update Unverified" ? Qt.hsla(0.12, 0.75, 0.55, 1) : Commons.Color.accent
                   font.family: dialog.fontFamily
                   font.pixelSize: Style.font.caption - 1
                 }
@@ -162,7 +163,7 @@ Rectangle {
                   text: dialog.marketplaceStatus === "Verified on marketplace" ? "Verified"
                     : dialog.marketplaceStatus === "Update Unverified" ? "Update Unverified"
                     : dialog.marketplaceStatus
-                  color: dialog.marketplaceStatus === "Verified on marketplace" ? Color.accent
+                  color: dialog.marketplaceStatus === "Verified on marketplace" ? Commons.Color.accent
                     : dialog.marketplaceStatus === "Update Unverified" ? Qt.hsla(0.12, 0.75, 0.55, 1)
                     : Qt.darker(dialog.foreground, 2.0)
                   font.family: dialog.fontFamily
@@ -224,7 +225,7 @@ Rectangle {
         text: dialog.reviewNote
         textFormat: Text.PlainText
         visible: text !== ""
-        color: Color.urgent
+        color: Commons.Color.urgent
         font.family: dialog.fontFamily
         font.pixelSize: Style.font.caption
         Layout.fillWidth: true
@@ -242,7 +243,7 @@ Rectangle {
           visible: dialog.sourceUrl !== ""
           text: "\uf46c Source"
           foreground: dialog.foreground
-          accent: Color.accent
+          accent: Commons.Color.accent
           fontFamily: dialog.fontFamily
           fontSize: Style.font.bodySmall
           horizontalPadding: Style.space(10)
@@ -256,7 +257,7 @@ Rectangle {
           visible: dialog.marketplaceUrl !== ""
           text: "Marketplace"
           foreground: dialog.foreground
-          accent: Color.accent
+          accent: Commons.Color.accent
           fontFamily: dialog.fontFamily
           fontSize: Style.font.bodySmall
           horizontalPadding: Style.space(10)
@@ -268,7 +269,7 @@ Rectangle {
           borderSpec: Border.controlSpec("normal", foreground, accent)
           text: "Cancel"
           foreground: dialog.foreground
-          accent: Color.accent
+          accent: Commons.Color.accent
           fontFamily: dialog.fontFamily
           fontSize: Style.font.bodySmall
           horizontalPadding: Style.space(12)

@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 Rectangle {
@@ -67,7 +68,7 @@ Rectangle {
           : "Enable"
         enabled: menu.plugin && (menu.plugin.canDisable || !menu.pluginEnabled)
         foreground: menu.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: menu.fontFamily
         fontSize: Style.font.bodySmall
         horizontalPadding: Style.space(8)
@@ -85,7 +86,7 @@ Rectangle {
         visible: menu.plugin && menu.plugin.sourceKey !== "" && menu.repoKnown
         text: "Source"
         foreground: menu.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: menu.fontFamily
         fontSize: Style.font.bodySmall
         horizontalPadding: Style.space(8)
@@ -104,7 +105,7 @@ Rectangle {
         text: menu.updateRunning ? "Updating…" : "Update"
         enabled: !menu.updateRunning
         foreground: menu.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: menu.fontFamily
         fontSize: Style.font.bodySmall
         horizontalPadding: Style.space(8)
@@ -135,11 +136,9 @@ Rectangle {
         }
       }
 
-      // Bar-widget placement. Only visible for widgets currently on the bar;
-      // the widget's own section is marked and disabled so the menu shows
-      // where the widget lives now.
+      // Bar-widget placement, including the plugin-folder dropdown.
       Repeater {
-        model: menu.canMove ? ["left", "center", "right"] : []
+        model: menu.canMove ? ["left", "center", "right", "folder"] : []
 
         Button {
           required property string modelData
@@ -147,11 +146,12 @@ Rectangle {
           readonly property bool isCurrent: menu.currentSection === modelData
 
           visible: menu.canMove
-          text: (isCurrent ? "● " : "") + "Move to " + modelData
+          text: (isCurrent ? "● " : "") + "Move to "
+            + (modelData === "folder" ? "Plugin Folder" : modelData)
           enabled: !isCurrent
           opacity: isCurrent ? 0.55 : 1.0
           foreground: menu.foreground
-          accent: Color.accent
+          accent: Commons.Color.accent
           fontFamily: menu.fontFamily
           fontSize: Style.font.bodySmall
           horizontalPadding: Style.space(8)
@@ -169,8 +169,8 @@ Rectangle {
       Button {
         visible: menu.plugin && !menu.plugin.firstParty
         text: "Remove"
-        foreground: Color.urgent
-        accent: Color.urgent
+        foreground: Commons.Color.urgent
+        accent: Commons.Color.urgent
         fontFamily: menu.fontFamily
         fontSize: Style.font.bodySmall
         horizontalPadding: Style.space(8)

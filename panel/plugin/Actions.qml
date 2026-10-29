@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
 ColumnLayout {
@@ -19,6 +20,7 @@ ColumnLayout {
   required property string fontFamily
 
   signal enabledChangeRequested(bool enabled)
+  signal openPanelRequested(string pluginId)
   signal sourceRequested(string sourceKey)
   signal updateRequested(string sourceKey)
   signal menuRequested(var sourceItem, real x, real y)
@@ -57,8 +59,8 @@ ColumnLayout {
         height: toggle.trackHeight
         radius: Style.cornerRadius > 0 ? height / 2 : 0
         color: toggle.checked
-          ? Color.accent
-          : Style.normalFillFor(actions.foreground, Color.accent)
+          ? Commons.Color.accent
+          : Style.normalFillFor(actions.foreground, Commons.Color.accent)
         Behavior on color { ColorAnimation { duration: 120 } }
 
         Rectangle {
@@ -67,7 +69,7 @@ ColumnLayout {
           radius: Style.cornerRadius > 0 ? height / 2 : 0
           x: toggle.checked ? toggle.trackWidth - width - toggle.inset : toggle.inset
           anchors.verticalCenter: parent.verticalCenter
-          color: toggle.checked ? Color.background : Qt.darker(actions.foreground, 1.25)
+          color: toggle.checked ? Commons.Color.background : Qt.darker(actions.foreground, 1.25)
           Behavior on x { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
           Behavior on color { ColorAnimation { duration: 120 } }
         }
@@ -84,6 +86,42 @@ ColumnLayout {
     }
 
     Button {
+      id: openButton
+
+      readonly property bool hasPanel: {
+        var kinds = actions.plugin.kinds
+        if (!kinds) return false
+        if (typeof kinds === "string") return kinds.indexOf("panel") !== -1
+        for (var i = 0; i < kinds.length; i++) {
+          if (kinds[i] === "panel") return true
+        }
+        return false
+      }
+
+      visible: actions.pluginEnabled && hasPanel
+      tooltipText: "Open plugin panel"
+      text: "OPEN"
+      bordered: true
+      borderSpec: openButton.hot ? Border.none()
+        : Border.controlSpec("normal", openButton.foreground, Commons.Color.accent)
+      foreground: actions.foreground
+      accent: Commons.Color.accent
+      fontFamily: actions.fontFamily
+      fontSize: Style.font.caption
+      iconSize: Style.font.caption
+      horizontalPadding: Style.space(4)
+      verticalPadding: Style.space(3)
+      Layout.preferredWidth: actions.menuWidth * 2.5
+      Layout.minimumWidth: actions.menuWidth * 2.5
+      Layout.maximumWidth: actions.menuWidth * 2.5
+      Layout.preferredHeight: actions.menuWidth
+      Layout.minimumHeight: actions.menuWidth
+      Layout.maximumHeight: actions.menuWidth
+      Layout.alignment: Qt.AlignVCenter
+      onClicked: actions.openPanelRequested(actions.plugin.id)
+    }
+
+    Button {
       id: menuButton
 
       iconText: "\uf142"
@@ -91,9 +129,9 @@ ColumnLayout {
       visible: !actions.plugin.firstParty
       bordered: true
       borderSpec: menuButton.hot ? Border.none()
-        : Border.controlSpec("normal", menuButton.foreground, Color.accent)
+        : Border.controlSpec("normal", menuButton.foreground, Commons.Color.accent)
       foreground: actions.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: actions.fontFamily
       fontSize: Style.font.bodySmall
       horizontalPadding: 0
@@ -125,9 +163,9 @@ ColumnLayout {
       text: "SOURCE \uDB85\uDD94"
       bordered: true
       borderSpec: sourceButton.hot ? Border.none()
-        : Border.controlSpec("normal", sourceButton.foreground, Color.accent)
+        : Border.controlSpec("normal", sourceButton.foreground, Commons.Color.accent)
       foreground: actions.foreground
-      accent: Color.accent
+      accent: Commons.Color.accent
       fontFamily: actions.fontFamily
       fontSize: Style.font.caption
       iconSize: Style.font.caption

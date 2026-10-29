@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "../Presentation.js" as Presentation
 import "../plugin" as Plugin
@@ -64,8 +65,8 @@ Item {
 
   function statusColor(key) {
     var state = updateStates[key]
-    if (state === "UPDATE") return Style.selectedStateColor(foreground, Color.accent)
-    if (state === "ERROR") return Color.urgent
+    if (state === "UPDATE") return Style.selectedStateColor(foreground, Commons.Color.accent)
+    if (state === "ERROR") return Commons.Color.urgent
     if (state === "CURRENT") return Qt.darker(foreground, 1.6)
     if (state === "LOCAL_CHANGES" || state === "LOCAL") return Qt.darker(foreground, 1.5)
     return Qt.darker(foreground, 1.4)
@@ -93,7 +94,7 @@ Item {
   function verificationColor(id, sourceKey) {
     var entry = marketplaceMap[String(id)]
     var status = verificationText(id, sourceKey)
-    if (status === "Verified") return Color.accent
+    if (status === "Verified") return Commons.Color.accent
     if (status === "Update Unverified")
       return Qt.hsla(0.12, 0.75, 0.55, 1)
     return Qt.darker(foreground, 2.0)
@@ -144,7 +145,7 @@ Item {
             Button {
               text: "Back"
               foreground: page.foreground
-              accent: Color.accent
+              accent: Commons.Color.accent
               fontFamily: page.fontFamily
               fontSize: Style.font.bodySmall
               horizontalPadding: Style.space(10)
@@ -167,7 +168,7 @@ Item {
               width: checkProgress.width * 0.4
               height: checkProgress.height
               radius: checkProgress.radius
-              color: Style.selectedStateColor(page.foreground, Color.accent)
+              color: Style.selectedStateColor(page.foreground, Commons.Color.accent)
 
               NumberAnimation on x {
                 running: page.checking
@@ -206,7 +207,7 @@ Item {
               height: Math.max(Style.space(72), row.implicitHeight + Style.space(24))
               radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
               color: hover.hovered
-                ? Style.hoverFillFor(page.foreground, Color.accent)
+                ? Style.hoverFillFor(page.foreground, Commons.Color.accent)
                 : "transparent"
 
               RowLayout {
@@ -270,7 +271,7 @@ Item {
                       implicitHeight: Style.space(16)
                       radius: height / 2
                       color: updateUnverified ? Qt.rgba(0.85, 0.65, 0.13, 0.18)
-                        : verified ? Util.alpha(Color.accent, 0.18) : Util.alpha(page.foreground, 0.08)
+                        : verified ? Util.alpha(Commons.Color.accent, 0.18) : Util.alpha(page.foreground, 0.08)
 
                       Label {
                         id: verificationLabel
@@ -301,7 +302,7 @@ Item {
                     visible: page.updateStates[String(updateRow.modelData.sourceKey)] === "UPDATE" && url !== ""
                     text: "What's new ↗"
                     textFormat: Text.PlainText
-                    color: Color.accent
+                    color: Commons.Color.accent
                     font.family: page.fontFamily
                     font.pixelSize: Style.font.caption
                     font.underline: whatsNewLinkHover.hovered
@@ -357,7 +358,7 @@ Item {
                       onPaint: {
                         var context = getContext("2d")
                         context.reset()
-                        context.strokeStyle = Style.selectedStateColor(page.foreground, Color.accent)
+                        context.strokeStyle = Style.selectedStateColor(page.foreground, Commons.Color.accent)
                         context.lineWidth = 2
                         context.lineCap = "round"
                         var radius = width / 2 - 2
@@ -380,9 +381,9 @@ Item {
                   onClicked: page.updatePluginRequested(updateRow.modelData.sourceKey)
                   bordered: true
                   borderSpec: statusButton.hot ? Border.none()
-                    : Border.controlSpec("normal", statusButton.foreground, Color.accent)
-                  foreground: updateState === "ERROR" ? Color.urgent : page.foreground
-                  accent: Color.accent
+                    : Border.controlSpec("normal", statusButton.foreground, Commons.Color.accent)
+                  foreground: updateState === "ERROR" ? Commons.Color.urgent : page.foreground
+                  accent: Commons.Color.accent
                   fontFamily: page.fontFamily
                   fontSize: Style.font.caption
                   horizontalPadding: Style.space(8)
@@ -429,7 +430,7 @@ Item {
               visible: page.summary !== ""
               text: page.summary
               textFormat: Text.PlainText
-              color: Style.selectedStateColor(page.foreground, Color.accent)
+              color: Style.selectedStateColor(page.foreground, Commons.Color.accent)
               font.family: page.fontFamily
               font.pixelSize: Style.font.bodySmall
             }
@@ -450,7 +451,7 @@ Item {
               // enabled binding above already says when it is actionable.
               visible: true
               foreground: page.foreground
-              accent: Color.accent
+              accent: Commons.Color.accent
               fontFamily: page.fontFamily
               fontSize: Style.font.bodySmall
               horizontalPadding: Style.space(12)

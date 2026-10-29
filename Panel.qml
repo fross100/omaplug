@@ -6,6 +6,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 import "panel/Presentation.js" as Presentation
 import "panel/dialogs" as Dialogs
@@ -28,10 +29,10 @@ Panel {
   property var hostWidget: null
   readonly property var barIdentity: hostWidget || root
 
-  readonly property color contentForeground: bar ? bar.foreground : Color.foreground
+  readonly property color contentForeground: bar ? bar.foreground : Commons.Color.foreground
   readonly property string contentFontFamily: bar ? bar.fontFamily : Style.font.family
   // Overlays cover the popup's own card, so they match the popup background.
-  readonly property color panelBackground: Color.popups.background
+  readonly property color panelBackground: Commons.Color.popups.background
   readonly property string pluginVersion: {
     for (var i = 0; i < root.pluginRows.length; i++) {
       if (String(root.pluginRows[i].id || "") === root.moduleName)
@@ -586,6 +587,7 @@ Panel {
       || String(p.description || "").toLowerCase().indexOf(q) !== -1
       || String(p.id || "").toLowerCase().indexOf(q) !== -1
       || String(p.author || "").toLowerCase().indexOf(q) !== -1
+      || String(p.basedOnAuthor || "").toLowerCase().indexOf(q) !== -1
       || String(p.kinds || "").toLowerCase().indexOf(q) !== -1
   })
 
@@ -1125,6 +1127,8 @@ Panel {
         version: row.version !== "unknown" ? row.version : (item.version || "unknown"),
         author: row.author || item.author || "",
         description: row.description || item.description || "",
+        basedOnAuthor: row.basedOnAuthor || "",
+        basedOnUrl: row.basedOnUrl || "",
         kinds: row.kinds,
         canDisable: row.canDisable,
         firstParty: row.firstParty,
@@ -1508,10 +1512,21 @@ Panel {
     }
   }
 
+  function parseCommandJson(text) {
+    var output = String(text || "")
+    var lines = output.split(/\r?\n/)
+    for (var i = 0; i < lines.length; i++) {
+      if (/^[\[{]/.test(lines[i].trim()))
+        return JSON.parse(lines.slice(i).join("\n"))
+    }
+    return JSON.parse(output)
+  }
+
   function applyPluginConfig(text) {
     var config = {}
-    try { config = JSON.parse(String(text || "{}")) } catch (e) { return }
-    var nested = {}
+    try { config = root.parseCommandJson(text || "{}") }
+    catch (e) { console.warn("Could not parse omarchy shell config:", e); return }
+    var nested = Object.create(null)
     var layout = config.bar && config.bar.layout ? config.bar.layout : {}
     for (var section in layout) {
       var entries = Array.isArray(layout[section]) ? layout[section] : []
@@ -1520,12 +1535,19 @@ Panel {
         for (var j = 0; j < widgets.length; j++) nested[String(widgets[j])] = true
       }
     }
+    var folderWidgets = config.bar && config.bar.pluginFolder
+      && Array.isArray(config.bar.pluginFolder.widgets) ? config.bar.pluginFolder.widgets : []
+    for (var k = 0; k < folderWidgets.length; k++) {
+      var folderId = folderWidgets[k] && typeof folderWidgets[k] === "object"
+        ? folderWidgets[k].id : folderWidgets[k]
+      if (folderId) nested[String(folderId)] = true
+    }
     root.nestedWidgetIds = nested
   }
 
   function applyPluginList(text) {
     var catalog
-    try { catalog = JSON.parse(String(text || "")) }
+    try { catalog = root.parseCommandJson(text) }
     catch (e) {
       console.warn("Could not parse omarchy plugin list:", e)
       pluginRows = []
@@ -1548,6 +1570,8 @@ Panel {
         version: "unknown",
         author: "",
         description: "",
+        basedOnAuthor: "",
+        basedOnUrl: "",
         kinds: kinds.join(", "),
         canDisable: !isBarOption,
         firstParty: m.firstParty === true,
@@ -1571,11 +1595,21 @@ Panel {
       + "firstParty=false; [[ \"$base\" == \"$0/shell/plugins\" ]] && firstParty=true; "
       + "find -L \"$base\" -maxdepth 4 -type f '(' -name manifest.json -o -name '*.manifest.json' ')' -print0 "
       + "| while IFS= read -r -d '' file; do jq -c --argjson firstParty \"$firstParty\" "
-      + "'{id,name,version,author,description,kinds,firstParty:$firstParty}' \"$file\"; done; "
+      + "'{id,name,version,author,description,kinds,firstParty:$firstParty,basedOn:(.basedOn // null)}' \"$file\"; done; "
       + "done",
       Quickshell.env("OMARCHY_PATH")]
     root.pluginManifestProcess.running = true
     root.scanPluginRepos()
+  }
+
+  // Optional fork attribution: { "author": "...", "url": "https://github.com/..." }.
+  function basedOnFields(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value))
+      return { basedOnAuthor: "", basedOnUrl: "" }
+    return {
+      basedOnAuthor: typeof value.author === "string" ? value.author.trim().slice(0, 128) : "",
+      basedOnUrl: typeof value.url === "string" ? value.url.trim().slice(0, 512) : ""
+    }
   }
 
   function applyPluginMetadata(text) {
@@ -1592,12 +1626,15 @@ Panel {
       for (var id in metadata) {
         var fallback = metadata[id]
         var fallbackKinds = Array.isArray(fallback.kinds) ? fallback.kinds : []
+        var fallbackBasedOn = root.basedOnFields(fallback.basedOn)
         rows.push({
           id: id,
           name: fallback.name || id,
           version: fallback.version || "unknown",
           author: fallback.author || "",
           description: fallback.description || "",
+          basedOnAuthor: fallbackBasedOn.basedOnAuthor,
+          basedOnUrl: fallbackBasedOn.basedOnUrl,
           kinds: fallbackKinds.join(", "),
           canDisable: fallbackKinds.indexOf("bar") === -1,
           firstParty: fallback.firstParty === true,
@@ -1615,12 +1652,15 @@ Panel {
         rows.push(row)
         continue
       }
+      var basedOn = root.basedOnFields(item.basedOn)
       rows.push({
         id: row.id,
         name: item.name || row.name,
         version: item.version || row.version,
         author: item.author || row.author,
         description: item.description || row.description,
+        basedOnAuthor: basedOn.basedOnAuthor || row.basedOnAuthor || "",
+        basedOnUrl: basedOn.basedOnUrl || row.basedOnUrl || "",
         kinds: Array.isArray(item.kinds) ? item.kinds.join(", ") : row.kinds,
         canDisable: row.canDisable,
         firstParty: row.firstParty,
@@ -1660,7 +1700,7 @@ Panel {
   // drives enable/disable through `omarchy plugin …` subprocesses, so move
   // follows the same pattern with `omarchy bar move` instead of touching
   // the shell registry (which user panels no longer reach).
-  property var barLayoutCache: ({ left: [], center: [], right: [] })
+  property var barLayoutCache: ({ left: [], center: [], right: [], folder: [] })
   property Process barLayoutProcess: Process {
     onExited: function(exitCode) {
       if (exitCode === 0) root.applyBarLayout(barLayoutStdout.text)
@@ -1688,6 +1728,19 @@ Panel {
     }
   }
   property string movePending: ""
+  property string folderLayoutHelperPath: ""
+
+  property Process folderMoveProcess: Process {
+    onExited: function(exitCode) {
+      var err = String(folderMoveStdout.text || "").trim()
+      if (exitCode !== 0) root.moveSummary = "Move failed" + (err ? ": " + err : "")
+      else if (root.movePending !== "") root.moveSummary = "Moved " + root.movePending + "."
+      root.movePending = ""
+      root.refreshBarLayout()
+      root.refreshPlugins()
+    }
+    stdout: StdioCollector { id: folderMoveStdout; waitForEnd: true }
+  }
 
   function refreshBarLayout() {
     if (root.barLayoutProcess.running) return
@@ -1704,7 +1757,7 @@ Panel {
       return
     }
     var layout = config && config.bar ? config.bar.layout : null
-    var next = { left: [], center: [], right: [] }
+    var next = { left: [], center: [], right: [], folder: [] }
     var sections = ["left", "center", "right"]
     for (var s = 0; s < sections.length; s++) {
       var entries = layout && Array.isArray(layout[sections[s]]) ? layout[sections[s]] : []
@@ -1716,13 +1769,20 @@ Panel {
       }
       next[sections[s]] = ids
     }
+    var folder = config && config.bar && config.bar.pluginFolder
+      && Array.isArray(config.bar.pluginFolder.widgets) ? config.bar.pluginFolder.widgets : []
+    for (var f = 0; f < folder.length; f++) {
+      var entry = folder[f]
+      var id = entry && typeof entry === "object" ? entry.id : entry
+      if (id) next.folder.push(String(id))
+    }
     root.barLayoutCache = next
   }
 
   // Move state for the row-menu "Move to" actions. Only bar-widgets that are
   // currently on the bar can move; anything else hides the menu entries.
   function barSectionFor(id) {
-    var sections = ["left", "center", "right"]
+    var sections = ["left", "center", "right", "folder"]
     for (var s = 0; s < sections.length; s++) {
       var ids = root.barLayoutCache[sections[s]] || []
       if (ids.indexOf(String(id)) !== -1) return sections[s]
@@ -1748,8 +1808,13 @@ Panel {
   }
 
   function moveWidgetToSection(id, section) {
-    if (["left", "center", "right"].indexOf(section) === -1) return
-    if (root.barMoveProcess.running) return
+    if (["left", "center", "right", "folder"].indexOf(section) === -1) return
+    if (section === "folder" || root.barSectionFor(id) === "folder") {
+      var targetIndex = section === "folder" ? (root.barLayoutCache.folder || []).length : 0
+      root.moveWidgetToPosition(id, section, targetIndex)
+      return
+    }
+    if (root.barMoveProcess.running || root.folderMoveProcess.running) return
     if (root.barSectionFor(id) === section) return
     root.keepOpenAcrossRebuild()
     root.movePending = id + " to " + section
@@ -1759,12 +1824,17 @@ Panel {
   }
 
   function moveWidgetToPosition(id, section, index) {
-    if (["left", "center", "right"].indexOf(section) === -1) return
-    if (root.barMoveProcess.running) return
+    if (["left", "center", "right", "folder"].indexOf(section) === -1) return
+    if (root.barMoveProcess.running || root.folderMoveProcess.running) return
     root.keepOpenAcrossRebuild()
     var target = Math.max(0, Math.floor(Number(index) || 0))
     root.movePending = id + " to " + section
     root.moveSummary = "Moving " + id + "…"
+    if (section === "folder" || root.barSectionFor(id) === "folder") {
+      root.folderMoveProcess.command = ["python3", root.folderLayoutHelperPath, id, section, String(target)]
+      root.folderMoveProcess.running = true
+      return
+    }
     root.barMoveProcess.command = ["omarchy", "bar", "move", id, "--section", section, "--index", String(target)]
     root.barMoveProcess.running = true
   }
@@ -1772,7 +1842,7 @@ Panel {
   // Live bar layout grouped per section for the layout board.
   function layoutSections() {
     var out = []
-    var sections = ["left", "center", "right"]
+    var sections = ["left", "center", "right", "folder"]
     for (var s = 0; s < sections.length; s++) {
       var ids = root.barLayoutCache[sections[s]] || []
       var items = []
@@ -1789,6 +1859,7 @@ Panel {
     root.marketplaceHelperPath = String(Qt.resolvedUrl("marketplace-catalog.sh")).replace(/^file:\/\//, "")
     root.updateHelperPath = String(Qt.resolvedUrl("plugin-state.sh")).replace(/^file:\/\//, "")
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
+    root.folderLayoutHelperPath = String(Qt.resolvedUrl("plugin-folder-layout.py")).replace(/^file:\/\//, "")
     root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
     refreshPlugins()
     fetchMarketplace()
@@ -1912,7 +1983,9 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(560))
+    // Four drop columns need more room, while the fitted width remains capped
+    // by the available screen width in KeyboardPanel.
+    contentWidth: panel.fittedContentWidth(Style.space(700))
     contentHeight: panel.fittedContentHeight(Style.space(720))
 
     // ------------------------------------------------------------------- content
@@ -1979,7 +2052,7 @@ Panel {
                 tooltipText: "Open the Omarchy plugin marketplace"
                 bordered: true
                 foreground: root.contentForeground
-                accent: Color.accent
+                accent: Commons.Color.accent
                 fontFamily: root.contentFontFamily
                 fontSize: Style.font.caption
                 horizontalPadding: Style.space(8)
@@ -1994,7 +2067,7 @@ Panel {
                 tooltipText: "Clear the QML cache and restart the shell so every plugin reloads from source"
                 bordered: true
                 foreground: root.contentForeground
-                accent: Color.accent
+                accent: Commons.Color.accent
                 fontFamily: root.contentFontFamily
                 fontSize: Style.font.caption
                 horizontalPadding: Style.space(8)
@@ -2069,7 +2142,7 @@ Panel {
             tooltipText: "Select plugins to remove"
             enabled: !root.removingPlugin
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2085,9 +2158,9 @@ Panel {
             tooltipText: root.checkingUpdates ? "Checking for updates…" : "Check updates"
             enabled: !root.checkingUpdates && !root.updateDetachedRunning
             foreground: root.checkingUpdates
-              ? Color.muted
+              ? Commons.Color.muted
               : root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             iconSpinning: root.checkingUpdates
             // Keep the glyph's visual center stable while it spins and make
             // the disabled state unmistakable against bright themes.
@@ -2107,7 +2180,7 @@ Panel {
             iconText: ""
             tooltipText: "Arrange bar layout"
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2119,7 +2192,7 @@ Panel {
             iconText: "󱓖"
             tooltipText: "Install plugin"
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2131,7 +2204,7 @@ Panel {
             iconText: "\uf013"
             tooltipText: "Settings"
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(10)
@@ -2163,7 +2236,7 @@ Panel {
             bordered: true
             enabled: !root.marketplaceFetching
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(12)
@@ -2189,7 +2262,7 @@ Panel {
             foreground: root.contentForeground
             background: root.panelBackground
             popupBorder: Util.alpha(root.contentForeground, 0.2)
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             onChanged: function(v) { root.filterMode = parseInt(v) }
           }
@@ -2203,7 +2276,7 @@ Panel {
             foreground: root.contentForeground
             background: root.panelBackground
             popupBorder: Util.alpha(root.contentForeground, 0.2)
-            accent: Color.accent
+            accent: Commons.Color.accent
             fontFamily: root.contentFontFamily
             onChanged: function(v) { root.filterKind = v }
           }
@@ -2214,7 +2287,7 @@ Panel {
             placeholderText: "Search plugins…"
             placeholderTextColor: Util.alpha(root.contentForeground, 0.45)
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             font.family: root.contentFontFamily
             text: root.searchText
             onTextChanged: root.searchText = text
@@ -2270,6 +2343,10 @@ Panel {
             onEnabledChangeRequested: function(pluginId, enabled) {
               root.setPluginEnabled(pluginId, enabled)
             }
+            onOpenPanelRequested: function(pluginId) {
+              Quickshell.execDetached(["omarchy-shell", "shell", "summon", pluginId, "{}"])
+              root.close()
+            }
             onOpenUrlRequested: function(url) { Qt.openUrlExternally(url) }
             onSourceRequested: function(sourceKey) { root.openPluginRepo(sourceKey) }
             onUpdateRequested: function(sourceKey) { root.updatePlugin(sourceKey) }
@@ -2298,7 +2375,7 @@ Panel {
             textFormat: Text.PlainText
             color: root.checkingUpdates
               ? Qt.darker(root.contentForeground, 1.5)
-              : Style.selectedStateColor(root.contentForeground, Color.accent)
+              : Style.selectedStateColor(root.contentForeground, Commons.Color.accent)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -2307,7 +2384,7 @@ Panel {
             visible: root.removeSummary !== ""
             text: root.removeSummary
             textFormat: Text.PlainText
-            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            color: Style.selectedStateColor(root.contentForeground, Commons.Color.accent)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -2316,7 +2393,7 @@ Panel {
             visible: root.moveSummary !== ""
             text: root.moveSummary
             textFormat: Text.PlainText
-            color: Style.selectedStateColor(root.contentForeground, Color.accent)
+            color: Style.selectedStateColor(root.contentForeground, Commons.Color.accent)
             font.family: root.contentFontFamily
             font.pixelSize: Style.font.bodySmall
           }
@@ -2330,7 +2407,7 @@ Panel {
             text: "Remove selected (" + root.selectedRemoveCount + ")"
             enabled: !root.removingPlugin
             foreground: root.contentForeground
-            accent: Color.urgent
+            accent: Commons.Color.urgent
             fontFamily: root.contentFontFamily
             fontSize: Style.font.bodySmall
             horizontalPadding: Style.space(12)
@@ -2348,7 +2425,7 @@ Panel {
               && root.bulkUpdateReady
               && (root.bulkUpdateKeys.length > 0 || !root.updateCheckHasRun)
             foreground: root.contentForeground
-            accent: Color.accent
+            accent: Commons.Color.accent
             iconSpinning: root.checkingUpdates || root.updateDetachedRunning
             iconSize: Style.font.body
             fontFamily: root.contentFontFamily
@@ -2503,9 +2580,9 @@ Panel {
         : "\"" + (root.removePending.length === 1 ? root.removePending[0] : "") + "\" will be deleted from your config. This cannot be undone."
       confirmText: "Remove"
       dismissEnabled: !root.removingPlugin
-      borderColor: Color.urgent
-      confirmForeground: Color.urgent
-      confirmAccent: Color.urgent
+      borderColor: Commons.Color.urgent
+      confirmForeground: Commons.Color.urgent
+      confirmAccent: Commons.Color.urgent
       confirmBordered: true
       titleWrapMode: Text.WordWrap
       foreground: root.contentForeground
@@ -2557,8 +2634,8 @@ Panel {
       title: "Install plugin?"
       message: "Review the source before enabling this plugin. It will be installed disabled."
       confirmText: "Install"
-      confirmAccent: Color.urgent
-      confirmForeground: Color.urgent
+      confirmAccent: Commons.Color.urgent
+      confirmForeground: Commons.Color.urgent
       maximumWidth: Style.space(380)
       titleWrapMode: Text.WordWrap
       pluginName: root.installReviewEntry() ? (root.installReviewEntry().name || root.installPendingUrl.split("/").pop()) : root.installPendingUrl.split("/").pop()

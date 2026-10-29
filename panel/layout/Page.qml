@@ -4,12 +4,12 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import qs.Commons
+import qs.Commons as Commons
 import qs.Ui
 
-// Bar-layout board: the three bar sections side by side, each showing its
-// widgets in live order. Drag a chip within a column to reorder, or across
-// columns to move sections. Every drop calls back with (id, section, index)
-// and the owner applies it with `omarchy bar move`, so the bar follows.
+// Bar-layout board: the bar sections plus a plugin-folder drop target. Drag a
+// chip to reorder, move sections, or tuck it into the dropdown folder.
+// Every drop calls back with (id, section, index) and the owner applies it.
 //
 // Interaction notes:
 // - The dragged chip stays in place as a dimmed placeholder; a thin accent
@@ -45,7 +45,7 @@ Item {
     if (board.dragId !== "") board.cancelDrag()
   }
 
-  // Active drag state, shared across the three columns.
+  // Active drag state, shared across the columns.
   property string dragId: ""
   property string dragName: ""
   property string dragFromSection: ""
@@ -116,7 +116,7 @@ Item {
         text: "Bar Layout"
         color: board.foreground
         font.family: board.fontFamily
-        font.pixelSize: Style.font.body
+        font.pixelSize: Style.font.bodySmall
         font.bold: true
         Layout.fillWidth: true
       }
@@ -126,7 +126,7 @@ Item {
         tooltipText: "Back to plugin list"
         bordered: true
         foreground: board.foreground
-        accent: Color.accent
+        accent: Commons.Color.accent
         fontFamily: board.fontFamily
         fontSize: Style.font.bodySmall
         horizontalPadding: Style.space(10)
@@ -136,11 +136,12 @@ Item {
     }
 
     Label {
-      text: "Drag a widget to reorder — within its section or across sections."
+      text: "Arrange plugin icons on the left, center, or right of the bar. Drag one into Plugin Folder to hide its icon while keeping it enabled; set a custom keyboard shortcut on the main page to access plugins that support shortcuts."
       textFormat: Text.PlainText
+      wrapMode: Text.WordWrap
       color: Qt.darker(board.foreground, 1.5)
       font.family: board.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.caption
       Layout.fillWidth: true
     }
 
@@ -161,15 +162,20 @@ Item {
           readonly property bool isDropColumn: board.dragId !== "" && board.dropSection === column.section
 
           Layout.fillWidth: true
+          // fillWidth alone only splits the spare space, so the longer folder
+          // header would otherwise make that column wider than the rest.
+          Layout.preferredWidth: 0
+          Layout.minimumWidth: 0
           Layout.fillHeight: true
           spacing: Style.space(6)
 
           Label {
-            text: column.section.toUpperCase()
+            text: column.section === "folder" ? "📁 🧩 PLUGIN FOLDER" : column.section.toUpperCase()
             color: board.foreground
             font.family: board.fontFamily
             font.pixelSize: Style.font.caption
             font.bold: true
+            elide: Text.ElideRight
             horizontalAlignment: Text.AlignHCenter
             Layout.fillWidth: true
           }
@@ -179,12 +185,24 @@ Item {
             Layout.fillHeight: true
             radius: Style.cornerRadius > 0 ? Style.cornerRadius : 4
             color: column.isDropColumn
-              ? Util.alpha(Color.accent, 0.08)
+              ? Util.alpha(Commons.Color.accent, 0.08)
               : Util.alpha(board.foreground, 0.04)
             border.color: column.isDropColumn
-              ? Util.alpha(Color.accent, 0.5)
+              ? Util.alpha(Commons.Color.accent, 0.5)
               : Util.alpha(board.foreground, 0.12)
             border.width: 1
+
+            Label {
+              visible: column.section === "folder" && column.entries.length === 0
+              anchors.centerIn: parent
+              width: parent.width - Style.space(20)
+              text: "Drop widgets here\nto add them to the bar dropdown"
+              color: Qt.darker(board.foreground, 1.5)
+              font.family: board.fontFamily
+              font.pixelSize: Style.font.caption
+              horizontalAlignment: Text.AlignHCenter
+              wrapMode: Text.WordWrap
+            }
 
             ListView {
               id: sectionList
@@ -198,6 +216,7 @@ Item {
               currentIndex: -1
               highlight: null
               keyNavigationEnabled: false
+              z: 1
 
               Component.onCompleted: board.registerList(column.section, sectionList)
 
@@ -229,10 +248,10 @@ Item {
                   anchors.fill: parent
                   radius: height / 2
                   color: chip.isDragged
-                    ? Util.alpha(Color.accent, 0.25)
-                    : Style.normalFillFor(board.foreground, Color.accent)
+                    ? Util.alpha(Commons.Color.accent, 0.25)
+                    : Style.normalFillFor(board.foreground, Commons.Color.accent)
                   border.color: chip.isDragged
-                    ? Color.accent
+                    ? Commons.Color.accent
                     : Util.alpha(board.foreground, 0.15)
                   border.width: 1
                   opacity: chip.isDragged ? 0.55 : 1.0
@@ -258,7 +277,7 @@ Item {
                       maximumLineCount: 1
                       color: board.foreground
                       font.family: board.fontFamily
-                      font.pixelSize: Style.font.bodySmall
+                      font.pixelSize: Style.font.caption
                       Layout.fillWidth: true
                       Layout.alignment: Qt.AlignVCenter
                     }
@@ -322,7 +341,7 @@ Item {
                   anchors.right: parent.right
                   height: Style.space(3)
                   radius: height / 2
-                  color: Color.accent
+                  color: Commons.Color.accent
                 }
 
                 Rectangle {
@@ -333,7 +352,7 @@ Item {
                   anchors.right: parent.right
                   height: Style.space(3)
                   radius: height / 2
-                  color: Color.accent
+                  color: Commons.Color.accent
                 }
               }
 
@@ -362,11 +381,11 @@ Item {
   Rectangle {
     id: ghost
     visible: board.dragId !== ""
-    width: Math.min(Style.space(200), board.width / 3 - Style.space(16))
+    width: Math.min(Style.space(200), board.width / 4 - Style.space(16))
     height: Style.space(34)
     radius: height / 2
-    color: Util.alpha(Color.accent, 0.85)
-    border.color: Color.accent
+    color: Util.alpha(Commons.Color.accent, 0.85)
+    border.color: Commons.Color.accent
     border.width: 1
     x: board.ghostX - width / 2
     y: board.ghostY - height / 2
@@ -381,16 +400,16 @@ Item {
       maximumLineCount: 1
       text: board.dragName
       textFormat: Text.PlainText
-      color: Color.background
+      color: Commons.Color.background
       font.family: board.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.caption
       font.bold: true
     }
   }
 
   function updateDropTarget(x, y) {
     if (board.dragId === "") return
-    var names = ["left", "center", "right"]
+    var names = ["left", "center", "right", "folder"]
     for (var i = 0; i < names.length; i++) {
       var list = board._lists[names[i]]
       if (!list) continue
