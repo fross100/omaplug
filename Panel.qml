@@ -1861,8 +1861,10 @@ Panel {
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
     root.folderLayoutHelperPath = String(Qt.resolvedUrl("plugin-folder-layout.py")).replace(/^file:\/\//, "")
     root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
-    refreshPlugins()
-    fetchMarketplace()
+    // The plugin list and marketplace catalog are not loaded here: the bar
+    // builds one hidden instance of this panel per monitor at shell start,
+    // and open() loads both anyway. The update badge only needs the status
+    // files below, so nothing visible depends on pre-warming.
     Qt.callLater(function() { updateStatusFile.reload(); installStatusFile.reload() })
     // A toggle/move/remove rewrites shell.json, and the bar rebuilds every
     // widget on every monitor in response — including this panel's own
