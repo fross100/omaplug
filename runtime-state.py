@@ -254,6 +254,26 @@ def review_repository(url):
     return result
 
 
+REOPEN_VIEW_FIELDS = {"scrollY": (int, float), "searchText": str, "filterMode": int, "filterKind": str}
+
+
+def reopen_view(args):
+    """The panel's scroll position, search and filters, kept across a shell rebuild.
+    Unknown fields and wrong types are dropped; a bad value never stops the reopen."""
+    try:
+        parsed = json.loads(args[0]) if args else {}
+    except ValueError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    view = {}
+    for key, kind in REOPEN_VIEW_FIELDS.items():
+        value = parsed.get(key)
+        if isinstance(value, kind) and not isinstance(value, bool):
+            view[key] = value[:256] if isinstance(value, str) else value
+    return view
+
+
 def main():
     os.umask(0o077)
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
@@ -273,7 +293,7 @@ def main():
         elif action == "reopen-write":
             if args[0] not in ("layout", "main"):
                 raise ValueError("invalid reopen page")
-            store.write("reopen.status", json.dumps({"page": args[0], "time": time.time()}).encode())
+            store.write("reopen.status", json.dumps({"page": args[0], "time": time.time(), "view": reopen_view(args[1:])}).encode())
         elif action == "reopen-read":
             with store.lock("reopen.flock"):
                 data = json.loads(store.read("reopen.status"))
@@ -281,6 +301,7 @@ def main():
                 if time.time() - data["time"] > 10:
                     return 1
                 print(data["page"])
+                print(json.dumps(data.get("view", {})))
         elif action != "read":
             raise ValueError("unknown action")
     return 0

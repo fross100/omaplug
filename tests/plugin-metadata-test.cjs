@@ -121,13 +121,19 @@ try {
   const reopenStart = source.indexOf('  function keepOpenAcrossRebuild(');
   vm.runInContext(source.slice(reopenStart, source.indexOf('\n  }', reopenStart) + 4), context);
   context.keepOpenFlagWrite = {};
+  context.pluginList = { contentY: 340 };
+  context.searchText = 'clock';
+  context.filterMode = 0;
+  context.filterKind = 'bar-widget';
   context.layoutPageOpen = true;
   context.keepOpenAcrossRebuild();
-  assert.equal(context.keepOpenFlagWrite.command.at(-1), 'layout');
+  assert.equal(context.keepOpenFlagWrite.command.at(-2), 'layout');
+  assert.deepEqual(JSON.parse(context.keepOpenFlagWrite.command.at(-1)),
+    { scrollY: 340, searchText: 'clock', filterMode: 0, filterKind: 'bar-widget' });
   assert.equal(context.keepOpenFlagWrite.running, true);
   context.layoutPageOpen = false;
   context.keepOpenAcrossRebuild();
-  assert.equal(context.keepOpenFlagWrite.command.at(-1), 'main');
+  assert.equal(context.keepOpenFlagWrite.command.at(-2), 'main');
   assert.match(source, /^    keepOpenFlagRead\.running = true$/m);
   console.log('panel-reopen-test: ok');
   const settingsStart = source.indexOf('  function persistAutoCheckSetting(');
