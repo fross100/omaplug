@@ -1861,8 +1861,10 @@ Panel {
     root.updateRunnerPath = String(Qt.resolvedUrl("update-helper.sh")).replace(/^file:\/\//, "")
     root.folderLayoutHelperPath = String(Qt.resolvedUrl("plugin-folder-layout.py")).replace(/^file:\/\//, "")
     root.autoCheckCoordinatorPath = String(Qt.resolvedUrl("auto-check-coordinator.sh")).replace(/^file:\/\//, "")
-    refreshPlugins()
-    fetchMarketplace()
+    // The plugin list and marketplace catalog are not loaded here: the bar
+    // builds one hidden instance of this panel per monitor at shell start,
+    // and open() loads both anyway. The update badge only needs the status
+    // files below, so nothing visible depends on pre-warming.
     Qt.callLater(function() { updateStatusFile.reload(); installStatusFile.reload() })
     // A toggle/move/remove rewrites shell.json, and the bar rebuilds every
     // widget on every monitor in response — including this panel's own
@@ -1877,7 +1879,13 @@ Panel {
   // rebuild, and the shell object rejects dynamic properties.
   function keepOpenAcrossRebuild() {
     keepOpenFlagWrite.command = ["python3", root.runtimeStatePath, "reopen-write",
-      root.layoutPageOpen ? "layout" : "main"]
+      root.layoutPageOpen ? "layout" : "main",
+      JSON.stringify({
+        scrollY: pluginList.contentY,
+        searchText: root.searchText,
+        filterMode: root.filterMode,
+        filterKind: root.filterKind
+      })]
     keepOpenFlagWrite.running = true
   }
 
@@ -1895,10 +1903,18 @@ Panel {
     onExited: function(exitCode) {
       if (exitCode === 0) {
         keepOpenRetries = 0
-        var restoreLayout = String(keepOpenState.text).trim() === "layout"
+        var lines = String(keepOpenState.text).split("\n")
+        var restoreLayout = lines[0].trim() === "layout"
+        var view = {}
+        try { view = JSON.parse(lines[1] || "{}") } catch (e) {}
         Qt.callLater(function() {
+          if (typeof view.filterMode === "number") root.filterMode = view.filterMode
+          if (typeof view.filterKind === "string") root.filterKind = view.filterKind
+          if (typeof view.searchText === "string") root.searchText = view.searchText
+          root.pendingScrollY = typeof view.scrollY === "number" ? view.scrollY : -1
           root.open()
           root.layoutPageOpen = restoreLayout
+          scrollRestore.restart()
         })
       } else if (keepOpenRetries < 4) {
         // The flag write races the rebuild: the fresh instance can load
@@ -1910,6 +1926,26 @@ Panel {
   }
 
   property int keepOpenRetries: 0
+  property real pendingScrollY: -1
+
+  // The list fills asynchronously after a rebuild, so retry until it is tall
+  // enough to hold the saved scroll offset.
+  Timer {
+    id: scrollRestore
+    interval: 120
+    repeat: true
+    property int tries: 0
+    onTriggered: {
+      if (root.pendingScrollY < 0) { stop(); return }
+      var max = Math.max(0, pluginList.contentHeight - pluginList.height)
+      if (pluginList.count > 0 && (max >= root.pendingScrollY || tries >= 15)) {
+        pluginList.contentY = Math.min(root.pendingScrollY, max)
+        root.pendingScrollY = -1
+        tries = 0
+        stop()
+      } else tries++
+    }
+  }
 
   Timer {
     id: keepOpenRetry
@@ -2301,6 +2337,8 @@ Panel {
           Layout.fillHeight: true
           clip: true
           spacing: 0
+          boundsBehavior: Flickable.StopAtBounds
+          boundsMovement: Flickable.StopAtBounds
           model: root.visibleRows
           ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
@@ -2311,6 +2349,56 @@ Panel {
               radius: width / 2
               color: Util.alpha(root.contentForeground, 0.45)
             }
+          }
+
+          // Qt's default notch is three text lines, less than one omaplug
+          // row. On Wayland a mouse also reports a small pixelDelta, so the
+          // notch step comes from angleDelta first; pixelDelta is only the
+          // touchpad fallback. Rows vary in height, so the step uses the
+          // list's average row height, not a fixed minimum. Discrete notches
+          // animate briefly; touchpad deltas stay immediate.
+          // Browser-like wheel scrolling for both discrete mice and high-res
+          // continuous wheels (e.g. Logitech MX Master). High-res mice report
+          // angleDelta in fractional units (e.g. 1..15) without pixelDelta.
+          // Scale angleDelta so 120 units (one full notch) scrolls ~4 rows.
+          WheelHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: function(event) {
+              var touchpad = event.device && event.device.type === PointerDevice.TouchPad
+              var row = pluginList.count > 0 ? pluginList.contentHeight / pluginList.count : Style.space(81)
+              var delta = 0
+              if (touchpad && event.pixelDelta.y !== 0) {
+                delta = event.pixelDelta.y
+              } else if (event.angleDelta.y !== 0) {
+                // ~1.15 rows per 120 units (one standard notch)
+                delta = (event.angleDelta.y / 120) * (row * 1.15)
+              } else if (event.pixelDelta.y !== 0) {
+                delta = event.pixelDelta.y * 1.1
+              }
+              if (delta === 0) return
+              pluginList.cancelFlick()
+              var limit = Math.max(0, pluginList.contentHeight - pluginList.height)
+              var current = pluginScroll.running ? pluginScroll.targetY : pluginList.contentY
+              if ((current <= 0 && delta > 0) || (current >= limit && delta < 0)) {
+                event.accepted = true
+                return
+              }
+              var targetY = Math.max(0, Math.min(limit, current - delta))
+              pluginScroll.targetY = targetY
+              pluginScroll.restart()
+              event.accepted = true
+            }
+          }
+
+          SmoothedAnimation {
+            id: pluginScroll
+            target: pluginList
+            property: "contentY"
+            property real targetY: pluginList.contentY
+            to: targetY
+            velocity: -1
+            maximumEasingTime: 120
+            reversingMode: SmoothedAnimation.Immediate
           }
 
           delegate: Plugin.Row {

@@ -187,6 +187,8 @@ Item {
             Layout.fillHeight: true
             clip: true
             spacing: Style.space(4)
+            boundsBehavior: Flickable.StopAtBounds
+          boundsMovement: Flickable.StopAtBounds
             model: page.rows
             ScrollBar.vertical: ScrollBar {
               policy: ScrollBar.AsNeeded
@@ -197,6 +199,46 @@ Item {
                 radius: width / 2
                 color: Util.alpha(page.foreground, 0.45)
               }
+            }
+
+            // Same six-rows-per-notch animated step as the main plugin list.
+            WheelHandler {
+              acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+              onWheel: function(event) {
+                var touchpad = event.device && event.device.type === PointerDevice.TouchPad
+                var row = updateList.count > 0 ? updateList.contentHeight / updateList.count : Style.space(81)
+                var delta = 0
+                if (touchpad && event.pixelDelta.y !== 0) {
+                  delta = event.pixelDelta.y
+                } else if (event.angleDelta.y !== 0) {
+                  delta = (event.angleDelta.y / 120) * (row * 1.15)
+                } else if (event.pixelDelta.y !== 0) {
+                  delta = event.pixelDelta.y * 1.1
+                }
+                if (delta === 0) return
+                updateList.cancelFlick()
+                var limit = Math.max(0, updateList.contentHeight - updateList.height)
+                var current = updateScroll.running ? updateScroll.targetY : updateList.contentY
+                if ((current <= 0 && delta > 0) || (current >= limit && delta < 0)) {
+                  event.accepted = true
+                  return
+                }
+                var targetY = Math.max(0, Math.min(limit, current - delta))
+                updateScroll.targetY = targetY
+                updateScroll.restart()
+                event.accepted = true
+              }
+            }
+
+            SmoothedAnimation {
+              id: updateScroll
+              target: updateList
+              property: "contentY"
+              property real targetY: updateList.contentY
+              to: targetY
+              velocity: -1
+              maximumEasingTime: 120
+              reversingMode: SmoothedAnimation.Immediate
             }
 
             delegate: Rectangle {

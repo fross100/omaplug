@@ -45,6 +45,9 @@ BarWidget {
     Loader {
         id: panelLoader
         active: true
+        // Built after the bar is up rather than blocking it; every call
+        // forwarded to the panel already guards on panelItem.
+        asynchronous: true
         source: Qt.resolvedUrl("Panel.qml")
         visible: false
         onLoaded: {
