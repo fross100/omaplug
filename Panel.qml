@@ -2337,6 +2337,8 @@ Panel {
           Layout.fillHeight: true
           clip: true
           spacing: 0
+          boundsBehavior: Flickable.StopAtBounds
+          boundsMovement: Flickable.StopAtBounds
           model: root.visibleRows
           ScrollBar.vertical: ScrollBar {
             policy: ScrollBar.AsNeeded
@@ -2347,6 +2349,56 @@ Panel {
               radius: width / 2
               color: Util.alpha(root.contentForeground, 0.45)
             }
+          }
+
+          // Qt's default notch is three text lines, less than one omaplug
+          // row. On Wayland a mouse also reports a small pixelDelta, so the
+          // notch step comes from angleDelta first; pixelDelta is only the
+          // touchpad fallback. Rows vary in height, so the step uses the
+          // list's average row height, not a fixed minimum. Discrete notches
+          // animate briefly; touchpad deltas stay immediate.
+          // Browser-like wheel scrolling for both discrete mice and high-res
+          // continuous wheels (e.g. Logitech MX Master). High-res mice report
+          // angleDelta in fractional units (e.g. 1..15) without pixelDelta.
+          // Scale angleDelta so 120 units (one full notch) scrolls ~4 rows.
+          WheelHandler {
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onWheel: function(event) {
+              var touchpad = event.device && event.device.type === PointerDevice.TouchPad
+              var row = pluginList.count > 0 ? pluginList.contentHeight / pluginList.count : Style.space(81)
+              var delta = 0
+              if (touchpad && event.pixelDelta.y !== 0) {
+                delta = event.pixelDelta.y
+              } else if (event.angleDelta.y !== 0) {
+                // ~1.15 rows per 120 units (one standard notch)
+                delta = (event.angleDelta.y / 120) * (row * 1.15)
+              } else if (event.pixelDelta.y !== 0) {
+                delta = event.pixelDelta.y * 1.1
+              }
+              if (delta === 0) return
+              pluginList.cancelFlick()
+              var limit = Math.max(0, pluginList.contentHeight - pluginList.height)
+              var current = pluginScroll.running ? pluginScroll.targetY : pluginList.contentY
+              if ((current <= 0 && delta > 0) || (current >= limit && delta < 0)) {
+                event.accepted = true
+                return
+              }
+              var targetY = Math.max(0, Math.min(limit, current - delta))
+              pluginScroll.targetY = targetY
+              pluginScroll.restart()
+              event.accepted = true
+            }
+          }
+
+          SmoothedAnimation {
+            id: pluginScroll
+            target: pluginList
+            property: "contentY"
+            property real targetY: pluginList.contentY
+            to: targetY
+            velocity: -1
+            maximumEasingTime: 120
+            reversingMode: SmoothedAnimation.Immediate
           }
 
           delegate: Plugin.Row {
