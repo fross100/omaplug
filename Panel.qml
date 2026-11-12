@@ -918,14 +918,14 @@ Panel {
   function updateAll() {
     if (root.checkingUpdates || root.updateDetachedRunning) return
     if (root.bulkUpdateScope !== "all" && root.marketplaceFetching) return
-    root.startDetachedUpdates(root.bulkUpdateKeys.slice())
+    root.startDetachedUpdates(root.bulkUpdateKeys.slice(), root.bulkUpdateScope !== "all")
   }
 
   // Launch only the repositories proven updateable by the preceding check.
   // The helper is detached because the first successful merge makes Omarchy
   // unload this panel; progress lives at a stable runtime path so the newly
   // loaded instance can reconnect to the same job.
-  function startDetachedUpdates(ids) {
+  function startDetachedUpdates(ids, pin) {
     if (!ids || ids.length === 0 || root.checkingUpdates || root.updateDetachedRunning) return
     if (root.updateRunnerPath === "" || root.updateStatusPath === "") {
       root.updateSummary = "Update helper not found"
@@ -944,7 +944,12 @@ Panel {
       : "Updating 0 of " + ids.length + "…"
 
     var launch = [root.updateRunnerPath, root.updateStatusPath, root.updateExpectedJobId]
-    for (var i = 0; i < ids.length; i++) launch.push(ids[i])
+    for (var i = 0; i < ids.length; i++) {
+      // A verified/pending batch is pinned to the exact commit the check saw;
+      // the helper installs that SHA, never a re-fetched upstream HEAD.
+      var commit = pin ? String(root.incomingCommits[ids[i]] || "") : ""
+      launch.push(/^[0-9a-f]{40}$/.test(commit) ? ids[i] + "@" + commit : ids[i])
+    }
     try {
       Quickshell.execDetached(launch)
     } catch (e) {
@@ -1928,6 +1933,33 @@ Panel {
   property int keepOpenRetries: 0
   property real pendingScrollY: -1
 
+  function pasteIntoSearch() {
+    if (searchPaste.running) return
+    searchPasteGen++
+    searchPaste.gen = searchPasteGen
+    searchPaste.running = true
+  }
+
+  property int searchPasteGen: 0
+
+  // Native Qt Quick paste does an unbounded synchronous Wayland read, so a
+  // hostile clipboard owner can stall the shell. Read with a size/time cap.
+  Process {
+    id: searchPaste
+    property int gen: 0
+    command: ["python3", root.runtimeStatePath, "paste"]
+    stdout: StdioCollector { id: searchPasteOut; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (searchPaste.gen !== root.searchPasteGen || !root.opened || !searchField.activeFocus) return
+      if (exitCode !== 0) return
+      var text = String(searchPasteOut.text || "")
+      if (text === "") return
+      if (searchField.selectionEnd > searchField.selectionStart)
+        searchField.remove(searchField.selectionStart, searchField.selectionEnd)
+      searchField.insert(searchField.cursorPosition, text)
+    }
+  }
+
   // The list fills asynchronously after a rebuild, so retry until it is tall
   // enough to hold the saved scroll offset.
   Timer {
@@ -1970,6 +2002,8 @@ Panel {
   }
 
   function close() {
+    root.searchPasteGen++
+    if (searchPaste.running) searchPaste.running = false
     root.shortcutDialogOpen = false
     root.installDialogOpen = false
     root.settingsPageOpen = false
@@ -2327,6 +2361,23 @@ Panel {
             font.family: root.contentFontFamily
             text: root.searchText
             onTextChanged: root.searchText = text
+            // Replace native paste (unbounded synchronous Wayland read) with
+            // the capped reader; accept here so the TextField never sees it.
+            Keys.priority: Keys.BeforeItem
+            Keys.onPressed: function(event) {
+              if ((event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier))
+                  || (event.key === Qt.Key_Insert && (event.modifiers & Qt.ShiftModifier))) {
+                event.accepted = true
+                root.pasteIntoSearch()
+              }
+            }
+            MouseArea {
+              anchors.fill: parent
+              z: 1
+              acceptedButtons: Qt.MiddleButton
+              cursorShape: Qt.IBeamCursor
+              onPressed: root.pasteIntoSearch()
+            }
             Keys.onEscapePressed: { root.close() }
           }
         }
@@ -2709,6 +2760,7 @@ Panel {
       foreground: root.contentForeground
       fontFamily: root.contentFontFamily
       panelBackground: root.panelBackground
+      runtimeStatePath: root.runtimeStatePath
 
       onCloseRequested: root.installDialogOpen = false
       onInstallRequested: function(rawUrl) { root.requestInstall(rawUrl) }
