@@ -124,7 +124,7 @@ def stop_child(child):
     child.wait()
 
 
-def run(command, seconds, consume):
+def run(command, seconds, consume, limit=LIMIT):
     child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                              start_new_session=True)
     deadline = time.monotonic() + seconds
@@ -141,13 +141,26 @@ def run(command, seconds, consume):
                         selector.unregister(key.fileobj)
                         continue
                     total += len(chunk)
-                    if total > LIMIT:
+                    if total > limit:
                         raise ValueError("process output exceeds limit")
                     consume(chunk)
             return child.wait(timeout=max(0.1, deadline - time.monotonic()))
     finally:
         stop_child(child)
         child.stdout.close()
+
+
+PASTE_LIMIT = 4096
+
+def paste_text():
+    """Bounded clipboard read: a hostile owner can stream forever or never send EOF."""
+    output = bytearray()
+    try:
+        run(["wl-paste", "--type", "text", "--no-newline"], 1, output.extend, limit=PASTE_LIMIT)
+    except (ValueError, TimeoutError, subprocess.SubprocessError):
+        pass  # over the cap or stalled: keep the bounded prefix that already arrived
+    text = output.decode("utf-8", "replace")[:PASTE_LIMIT]
+    return re.sub(r"[\x00-\x1f\x7f]+", " ", text)
 
 
 def emit(data):
@@ -283,6 +296,9 @@ def main():
         return 0
     if action == "update":
         return update(args[0], args[1], args[2:])
+    if action == "paste":
+        sys.stdout.buffer.write(paste_text().encode("utf-8"))
+        return 0
     with contextlib.closing(PrivateDirectory(state_root())) as store:
         if action in ("check", "check-manual"):
             return check_plugins(args[0], store, action == "check")

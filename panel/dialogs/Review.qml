@@ -3,6 +3,8 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
@@ -17,6 +19,7 @@ Rectangle {
   required property color foreground
   required property string fontFamily
   required property color panelBackground
+  required property string runtimeStatePath
 
   signal closeRequested
   signal installRequested(string rawUrl)
@@ -25,11 +28,43 @@ Rectangle {
   color: Util.alpha("black", 0.6)
   focus: true
   onOpenChanged: {
-    if (open) Qt.callLater(function() { urlField.forceActiveFocus() })
+    if (open) {
+      Qt.callLater(function() { urlField.forceActiveFocus() })
+    } else {
+      urlPasteGen++
+      if (urlPaste.running) urlPaste.running = false
+    }
   }
   Keys.priority: Keys.BeforeItem
   Keys.onEscapePressed: {
     if (!dialog.running) dialog.closeRequested()
+  }
+
+  function pasteIntoUrl() {
+    if (urlPaste.running) return
+    urlPasteGen++
+    urlPaste.gen = urlPasteGen
+    urlPaste.running = true
+  }
+
+  property int urlPasteGen: 0
+
+  // Native Qt Quick paste does an unbounded synchronous Wayland read, so a
+  // hostile clipboard owner can stall the shell. Read with a size/time cap.
+  Process {
+    id: urlPaste
+    property int gen: 0
+    command: ["python3", dialog.runtimeStatePath, "paste"]
+    stdout: StdioCollector { id: urlPasteOut; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (urlPaste.gen !== dialog.urlPasteGen || !dialog.open || !urlField.activeFocus) return
+      if (exitCode !== 0) return
+      var text = String(urlPasteOut.text || "")
+      if (text === "") return
+      if (urlField.selectionEnd > urlField.selectionStart)
+        urlField.remove(urlField.selectionStart, urlField.selectionEnd)
+      urlField.insert(urlField.cursorPosition, text)
+    }
   }
 
   MouseArea {
@@ -87,6 +122,23 @@ Rectangle {
         accent: Commons.Color.accent
         font.family: dialog.fontFamily
         Layout.fillWidth: true
+        // Replace native paste (unbounded synchronous Wayland read) with the
+        // capped reader; accept here so the TextField never sees it.
+        Keys.priority: Keys.BeforeItem
+        Keys.onPressed: function(event) {
+          if ((event.key === Qt.Key_V && (event.modifiers & Qt.ControlModifier))
+              || (event.key === Qt.Key_Insert && (event.modifiers & Qt.ShiftModifier))) {
+            event.accepted = true
+            dialog.pasteIntoUrl()
+          }
+        }
+        MouseArea {
+          anchors.fill: parent
+          z: 1
+          acceptedButtons: Qt.MiddleButton
+          cursorShape: Qt.IBeamCursor
+          onPressed: dialog.pasteIntoUrl()
+        }
         onAccepted: {
           if (urlField.text.trim() !== "" && !dialog.running)
             dialog.installRequested(urlField.text)

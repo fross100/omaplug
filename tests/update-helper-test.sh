@@ -29,12 +29,29 @@ printf '\n' >> "$PLUGINS/dirty/manifest.json"
 git -C "$PLUGINS/detached" checkout -q --detach
 ln -s -- "$PLUGINS/good" "$PLUGINS/linked"
 
+# A plugin with a real remote, so pinned updates can compare against upstream.
+mkdir -p -- "$TMP/remotes"
+git init -q --bare -b main "$TMP/remotes/pinned.git"
+git init -q -b main "$PLUGINS/pinned"
+git -C "$PLUGINS/pinned" config user.name "Omaplug Tests"
+git -C "$PLUGINS/pinned" config user.email "omaplug-tests@example.invalid"
+printf '{"id":"pinned"}\n' > "$PLUGINS/pinned/manifest.json"
+git -C "$PLUGINS/pinned" add manifest.json
+git -C "$PLUGINS/pinned" commit -qm "fixture"
+git -C "$PLUGINS/pinned" remote add origin "$TMP/remotes/pinned.git"
+git -C "$PLUGINS/pinned" push -q origin main
+
 cat > "$BIN/omarchy" <<'EOF'
 #!/bin/bash
 printf '%s\n' "$*" >> "$OMAPLUG_TEST_LOG"
 case "${3:-}" in
   slow) sleep 0.4 ;;
 esac
+if [[ ${1:-} == plugin && ${2:-} == validate ]]; then
+  [[ -z ${OMAPLUG_TEST_VALIDATE_FAIL:-} ]] && exit 0
+  printf 'bad manifest\n' >&2
+  exit 1
+fi
 if [[ ${3:-} == fail ]]; then
   printf 'could not update %s\n' "$3" >&2
   exit 7
@@ -42,6 +59,13 @@ fi
 printf 'updated %s\n' "${3:-}"
 EOF
 chmod +x "$BIN/omarchy"
+
+# Never poke the running desktop shell from an isolated test run.
+cat > "$BIN/omarchy-shell" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+chmod +x "$BIN/omarchy-shell"
 
 export PATH="$BIN:$PATH"
 export OMAPLUG_TEST_LOG="$LOG"
@@ -63,7 +87,7 @@ assert_line() {
   }
 }
 
-if "$ROOT/update-helper.sh" "$STATUS" job-direct good fail dirty detached linked 'bad/id'; then
+if "$ROOT/update-helper.sh" "$STATUS" job-direct good fail dirty detached linked 'bad/id' 'pinned@notasha'; then
   printf 'FAIL: a partially failed update job returned success\n' >&2
   exit 1
 fi
@@ -77,12 +101,13 @@ assert_line $'failed\tdirty\tplugin gained local changes after the update check'
 assert_line $'failed\tdetached\tplugin is on a detached HEAD' "$STATUS"
 assert_line $'failed\tlinked\tplugin became a symlink after the update check' "$STATUS"
 assert_line $'failed\tbad/id\tinvalid plugin id' "$STATUS"
-assert_line $'done\t1\t5' "$STATUS"
+assert_line $'failed\tpinned\tinvalid plugin id' "$STATUS"
+assert_line $'done\t1\t6' "$STATUS"
 [[ $(stat -c '%a' "$STATUS") == 600 ]] || {
   printf 'FAIL: status file mode is %s instead of 600\n' "$(stat -c '%a' "$STATUS")" >&2
   exit 1
 }
-[[ $(tail -n 1 "$STATUS") == $'done\t1\t5' ]] || {
+[[ $(tail -n 1 "$STATUS") == $'done\t1\t6' ]] || {
   printf 'FAIL: done is not the final status record\n' >&2
   cat "$STATUS" >&2
   exit 1
@@ -94,6 +119,66 @@ assert_line 'plugin update fail --yes' "$LOG"
   cat "$LOG" >&2
   exit 1
 }
+
+# The check saw "checked"; upstream then advanced to "moved" before the update.
+# A pinned update must install "checked", never the unverified descendant.
+base=$(git -C "$PLUGINS/pinned" rev-parse HEAD)
+printf '{"checked":1}\n' > "$PLUGINS/pinned/manifest.json"
+git -C "$PLUGINS/pinned" commit -qam "checked"
+checked=$(git -C "$PLUGINS/pinned" rev-parse HEAD)
+git -C "$PLUGINS/pinned" push -q origin main
+printf '{"moved":1}\n' > "$PLUGINS/pinned/manifest.json"
+git -C "$PLUGINS/pinned" commit -qam "moved"
+git -C "$PLUGINS/pinned" push -q origin main
+git -C "$PLUGINS/pinned" reset -q --hard "$base"
+
+: > "$LOG"
+if ! "$ROOT/update-helper.sh" "$STATUS" job-pin-ok "pinned@$checked"; then
+  printf 'FAIL: pinned update rejected the checked commit\n' >&2
+  cat "$STATUS" >&2
+  exit 1
+fi
+assert_line $'ok\tpinned\tUpdated pinned' "$STATUS"
+[[ $(git -C "$PLUGINS/pinned" rev-parse HEAD) == "$checked" ]] || {
+  printf 'FAIL: pinned update did not land on the checked commit\n' >&2
+  exit 1
+}
+[[ $(cat "$PLUGINS/pinned/manifest.json") == '{"checked":1}' ]] || {
+  printf 'FAIL: pinned update checked out the moved upstream commit\n' >&2
+  exit 1
+}
+assert_line "plugin validate $PLUGINS/pinned" "$LOG"
+
+# A checked commit that cannot be fetched fails closed with no mutation.
+: > "$LOG"
+if "$ROOT/update-helper.sh" "$STATUS" job-pin-missing "pinned@$(printf 'a%.0s' {1..40})"; then
+  printf 'FAIL: pinned update accepted an unavailable commit\n' >&2
+  exit 1
+fi
+assert_line $'failed\tpinned\tcould not fetch the checked commit' "$STATUS"
+[[ $(git -C "$PLUGINS/pinned" rev-parse HEAD) == "$checked" ]] || {
+  printf 'FAIL: failed pinned update moved the checkout\n' >&2
+  exit 1
+}
+[[ ! -s $LOG ]] || {
+  printf 'FAIL: failed pinned update reached omarchy\n' >&2
+  cat "$LOG" >&2
+  exit 1
+}
+
+# A checked commit that fails manifest validation is rolled back.
+git -C "$PLUGINS/pinned" reset -q --hard "$base"
+export OMAPLUG_TEST_VALIDATE_FAIL=1
+if "$ROOT/update-helper.sh" "$STATUS" job-pin-invalid "pinned@$checked"; then
+  printf 'FAIL: pinned update accepted an invalid manifest\n' >&2
+  exit 1
+fi
+assert_line $'failed\tpinned\tchecked commit failed validation; rolled back: bad manifest' "$STATUS"
+[[ $(git -C "$PLUGINS/pinned" rev-parse HEAD) == "$base" ]] || {
+  printf 'FAIL: invalid pinned update was not rolled back\n' >&2
+  exit 1
+}
+unset OMAPLUG_TEST_VALIDATE_FAIL
 
 # A live runner owns the stable status path. A second runner must fail without
 # replacing or appending to that job's status stream.

@@ -7,7 +7,11 @@
 # progress outside the watched plugin directory so a reloaded panel can
 # reconnect.
 #
-# Usage: update-helper.sh <status-file> <job-id> <plugin-id> [plugin-id ...]
+# Usage: update-helper.sh <status-file> <job-id> <plugin-id[@commit]> [...]
+#
+# A plugin-id@commit pins the update to the commit the panel checked. The
+# helper installs exactly that commit rather than a re-fetched upstream HEAD,
+# and fails closed if it cannot be fetched or is not a fast-forward.
 
 set -uo pipefail
 umask 077
@@ -67,9 +71,14 @@ write_status $'total\t'"$#"
 
 updated=0
 failed=0
+pinned_updated=0
 
-for id in "$@"; do
-  if [[ ! $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || $id == *..* ]]; then
+for spec in "$@"; do
+  id="${spec%%@*}"
+  expected=""
+  [[ $spec == *@* ]] && expected="${spec#*@}"
+  if [[ ! $id =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ || $id == *..* \
+        || ( -n $expected && ! $expected =~ ^[0-9a-f]{40}$ ) ]]; then
     write_status $'failed\t'"$(one_line "$id")"$'\tinvalid plugin id'
     failed=$((failed + 1))
     continue
@@ -82,6 +91,45 @@ for id in "$@"; do
   fi
 
   write_status $'start\t'"$id"
+  dir="$PLUGINS_DIR/$id"
+
+  if [[ -n $expected ]]; then
+    # Never let the native updater re-fetch origin HEAD: fetch and fast-forward
+    # to the exact checked commit, so an upstream change in the check/apply
+    # window can never be checked out. Fail closed if it is unavailable.
+    before=$(git -C "$dir" rev-parse HEAD)
+    if ! timeout -k 2 60 git -C "$dir" fetch --quiet --no-tags origin "$expected"; then
+      write_status $'failed\t'"$id"$'\tcould not fetch the checked commit'
+      failed=$((failed + 1))
+      continue
+    fi
+    if ! git -C "$dir" merge-base --is-ancestor HEAD "$expected"; then
+      write_status $'failed\t'"$id"$'\tchecked commit is not a fast-forward'
+      failed=$((failed + 1))
+      continue
+    fi
+    if ! git -C "$dir" merge --ff-only "$expected" >/dev/null 2>&1; then
+      write_status $'failed\t'"$id"$'\tcannot fast-forward to the checked commit'
+      failed=$((failed + 1))
+      continue
+    fi
+    if ! out=$(timeout -k 2 60 omarchy plugin validate "$dir" 2>&1 | { head -c 8000; cat >/dev/null; }; exit "${PIPESTATUS[0]}"); then
+      detail=$(one_line "$out")
+      if git -C "$dir" reset --quiet --hard "$before"; then
+        detail="checked commit failed validation; rolled back: $detail"
+      else
+        detail="checked commit failed validation; rollback failed: $detail"
+      fi
+      write_status $'failed\t'"$id"$'\t'"$detail"
+      failed=$((failed + 1))
+      continue
+    fi
+    write_status $'ok\t'"$id"$'\tUpdated '"$id"
+    updated=$((updated + 1))
+    pinned_updated=1
+    continue
+  fi
+
   out=$(timeout -k 2 120 omarchy plugin update "$id" --yes 2>&1 | { head -c 8000; cat >/dev/null; }; exit "${PIPESTATUS[0]}")
   rc=$?
   detail=$(one_line "$out")
@@ -94,6 +142,12 @@ for id in "$@"; do
     failed=$((failed + 1))
   fi
 done
+
+# The native updater rescans after updating; pinned updates bypass it, so ask
+# the running shell to pick up the new plugin code exactly as it normally does.
+if (( pinned_updated )); then
+  timeout -k 2 30 omarchy-shell shell rescanPlugins >/dev/null 2>&1 || true
+fi
 
 write_status $'finished\t'"$(date +%s)"
 write_status $'done\t'"$updated"$'\t'"$failed"
