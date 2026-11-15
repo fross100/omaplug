@@ -1152,7 +1152,7 @@ Panel {
         root.marketplaceFetching = false
         root.marketplaceFetchFailed = true
         if (exitCode === 63)
-          console.warn("marketplace catalog fetch failed: catalog exceeded the 64 MiB fetch cap (curl exit 63)")
+          console.warn("marketplace catalog fetch failed: catalog exceeded the 64 MiB fetch cap (exit 63)")
         else
           console.warn("marketplace catalog fetch failed, exit code:", exitCode)
         return

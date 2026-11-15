@@ -62,4 +62,15 @@ jq -e '.plugins[0]
   and (.repositoryRelease.url | length) == 512' \
   <<< "$("$HELPER" "file://$HOSTILE")" >/dev/null
 
+# curl's cap counts compressed bytes, so the helper also rejects an oversized
+# decompressed payload (simulated here with a lowered cap).
+LOWCAP="$TMP/lowcap.sh"
+sed -e 's/--max-filesize 67108864/--max-filesize 1000000000/' \
+  -e 's/-le 67108864/-le 1000/' "$HELPER" > "$LOWCAP"
+set +e
+bash "$LOWCAP" "file://$FIXTURE" >/dev/null 2>&1
+rc=$?
+set -e
+test "$rc" -eq 63
+
 printf 'catalog-fetch-test: ok\n'

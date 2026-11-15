@@ -4,8 +4,15 @@ set -euo pipefail
 
 CATALOG_URL=${1:-https://plugins.omarchy.org/catalog.json}
 
-curl -fsSL --max-time 30 --max-filesize 67108864 "$CATALOG_URL" |
-  jq -ce '
+# The catalog is served gzipped (17 MB -> 2.3 MB), but curl's --max-filesize
+# counts compressed bytes, so the decompressed payload is capped here too.
+CATALOG_FILE=$(mktemp)
+trap 'rm -f -- "$CATALOG_FILE"' EXIT
+curl -fsSL --compressed --max-time 60 --max-filesize 67108864 -o "$CATALOG_FILE" "$CATALOG_URL"
+test "$(wc -c < "$CATALOG_FILE")" -le 67108864 ||
+  { printf 'catalog exceeded the 67108864 byte cap\n' >&2; exit 63; }
+
+jq -ce '
     def s($n): if type == "string" then .[0:$n] else . end;
     if (.plugins | type) != "array" then
       error("catalog.plugins is not an array")
@@ -44,4 +51,4 @@ curl -fsSL --max-time 30 --max-filesize 67108864 "$CATALOG_URL" |
         ]
       }
     end
-  '
+  ' "$CATALOG_FILE"
