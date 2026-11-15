@@ -1072,8 +1072,8 @@ Panel {
     root.updateSummary = message || "Update interrupted. Check again."
   }
 
-  // Fetches the public marketplace catalog (capped at 2 MB like every other
-  // retained output) and builds the id -> {verified} map.
+  // Fetches the public marketplace catalog (size-capped by the helper) and
+  // builds the id -> {verified} map.
   function fetchMarketplace() {
     if (root.marketplaceFetching || root.marketplaceHelperPath === "") return
     root.marketplaceFetching = true
@@ -1152,7 +1152,7 @@ Panel {
         root.marketplaceFetching = false
         root.marketplaceFetchFailed = true
         if (exitCode === 63)
-          console.warn("marketplace catalog fetch failed: catalog exceeded the 16 MiB fetch cap (curl exit 63)")
+          console.warn("marketplace catalog fetch failed: catalog exceeded the 64 MiB fetch cap (curl exit 63)")
         else
           console.warn("marketplace catalog fetch failed, exit code:", exitCode)
         return

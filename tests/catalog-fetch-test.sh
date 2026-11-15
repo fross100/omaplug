@@ -12,7 +12,7 @@ grep -Fq 'Qt.resolvedUrl("marketplace-catalog.sh")' "$PANEL"
 grep -Fq 'marketplaceProcess.command = [root.marketplaceHelperPath]' "$PANEL"
 grep -Fq 'if (exitCode !== 0)' "$PANEL"
 grep -Fq '!Array.isArray(catalog.plugins)' "$PANEL"
-grep -Fq -- '--max-filesize 16777216' "$HELPER"
+grep -Fq -- '--max-filesize 67108864' "$HELPER"
 
 if grep -Fq 'head -c 4194304' "$PANEL"; then
   printf 'FAIL: marketplace fetch must reject oversized catalogs, not truncate them\n' >&2

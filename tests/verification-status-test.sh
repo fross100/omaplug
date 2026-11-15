@@ -27,9 +27,9 @@ assert_contains 'marketplaceProcess.command = [root.marketplaceHelperPath]' "$PA
 assert_contains 'Marketplace unavailable' "$PANEL"
 assert_contains 'onClicked: root.fetchMarketplace()' "$PANEL"
 assert_contains 'console.warn("marketplace catalog fetch failed' "$PANEL"
-assert_contains 'catalog exceeded the 16 MiB fetch cap (curl exit 63)' "$PANEL"
+assert_contains 'catalog exceeded the 64 MiB fetch cap (curl exit 63)' "$PANEL"
 assert_contains 'required property bool marketplaceUnavailable' "$ROW"
 assert_contains 'marketplaceUnavailable: !pluginRow.modelData.firstParty && root.marketplaceFetchFailed' "$PANEL"
-assert_contains '--max-filesize 16777216' "$ROOT/marketplace-catalog.sh"
+assert_contains '--max-filesize 67108864' "$ROOT/marketplace-catalog.sh"
 
 printf 'verification-status-test: ok\n'

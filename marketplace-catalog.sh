@@ -4,7 +4,7 @@ set -euo pipefail
 
 CATALOG_URL=${1:-https://plugins.omarchy.org/catalog.json}
 
-curl -fsSL --max-time 30 --max-filesize 16777216 "$CATALOG_URL" |
+curl -fsSL --max-time 30 --max-filesize 67108864 "$CATALOG_URL" |
   jq -ce '
     if (.plugins | type) != "array" then
       error("catalog.plugins is not an array")
