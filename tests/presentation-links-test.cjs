@@ -40,4 +40,18 @@ for (const input of [
 ]) {
   assert.equal(context.releaseUrl(input), '');
 }
+
+// ToolTip.text is AutoText: manifest text must never contain markup, because an
+// <img> tag there makes the shell fetch a remote URL on hover.
+assert.equal(context.tooltipText('Plugin Manager'), 'Plugin Manager');
+assert.equal(context.tooltipText('<img src="https://evil.example/p.png">'), '');
+assert.equal(context.tooltipText('Hello <img src=x> world'), 'Hello  world');
+assert.equal(context.tooltipText('a\nb\tc'), 'a b c');
+assert.equal(context.tooltipText(null), '');
+assert.equal(context.tooltipText(undefined), '');
+assert.equal(context.tooltipText('x'.repeat(600)).length, 512);
+for (const input of ['<b', 'a > b', '<img src=x>plain', '<a href="x">link</a>']) {
+  const out = context.tooltipText(input);
+  assert.ok(!/[<>]/.test(out), `tooltipText left markup in ${JSON.stringify(input)}`);
+}
 console.log('presentation-links-test: ok');

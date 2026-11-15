@@ -162,7 +162,7 @@ Item {
             elide: Label.ElideRight
 
             // Full name only when elided · matches author/ListingLinks ToolTip style.
-            ToolTip.text: truncated ? text : ""
+            ToolTip.text: truncated ? Presentation.tooltipText(text) : ""
             ToolTip.visible: nameHover.hovered && truncated
             ToolTip.delay: 400
 
@@ -253,7 +253,7 @@ Item {
           maximumLineCount: 2
           elide: Label.ElideRight
 
-          ToolTip.text: truncated ? text : ""
+          ToolTip.text: truncated ? Presentation.tooltipText(text) : ""
           ToolTip.visible: descriptionHover.hovered && truncated
           ToolTip.delay: 400
 
@@ -277,7 +277,7 @@ Item {
             font.pixelSize: Style.font.caption
             font.underline: authorHover.hovered && pluginRow.authorUrl !== ""
 
-            ToolTip.text: pluginRow.authorUrl !== "" ? pluginRow.authorUrl : ("by " + pluginRow.modelData.author)
+            ToolTip.text: Presentation.tooltipText(pluginRow.authorUrl !== "" ? pluginRow.authorUrl : ("by " + pluginRow.modelData.author))
             ToolTip.visible: authorHover.hovered
             ToolTip.delay: 400
 

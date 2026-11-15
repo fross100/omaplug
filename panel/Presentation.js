@@ -48,6 +48,16 @@ function releaseUrl(url) {
     ? value : ""
 }
 
+// Qt's attached ToolTip text is AutoText, so manifest-derived text must reach
+// it markup-free or an <img> tag loads a remote resource on hover. Stray angle
+// brackets go too: Qt only treats text as rich if it can find a tag.
+function tooltipText(value) {
+  return String(value || "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/[<>\u0000-\u001f\u007f]/g, " ")
+    .slice(0, 512)
+}
+
 function kindLabel(kinds, knownKinds) {
   if (!kinds) return ""
   var parts = String(kinds).split(",")
