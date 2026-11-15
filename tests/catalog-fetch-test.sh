@@ -48,4 +48,18 @@ jq -e '.plugins[0] == {
 }' <<< "$SUMMARY" >/dev/null
 test "$(wc -c <<< "$SUMMARY")" -lt 4096
 
+# Long remote fields must be truncated at the producer, not carried into the panel.
+HOSTILE="$TMP/hostile.json"
+jq -n '{plugins: [{
+  id: ("i" * 5000),
+  verificationStatus: ("v" * 5000),
+  verificationCommit: ("c" * 5000),
+  repositoryRelease: {url: ("https://github.com/o/r/" + ("x" * 5000))}
+}]}' > "$HOSTILE"
+jq -e '.plugins[0]
+  | (.id | length) == 128 and (.verificationStatus | length) == 64
+  and (.verificationCommit | length) == 64
+  and (.repositoryRelease.url | length) == 512' \
+  <<< "$("$HELPER" "file://$HOSTILE")" >/dev/null
+
 printf 'catalog-fetch-test: ok\n'

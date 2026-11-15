@@ -23,4 +23,21 @@ for (const input of [
 ]) {
   assert.equal(context.normalizedGitHubUrl(input), '');
 }
+for (const input of [
+  'https://github.com/owner/repo/releases/tag/v1.0.0',
+  'https://github.com/owner/repo/tree/v0.1.0-beta.5'
+]) {
+  assert.equal(context.releaseUrl(input), input);
+}
+for (const input of [
+  'file:///etc/passwd',
+  'javascript:alert(1)',
+  'https://evil.example/owner/repo/releases/tag/v1',
+  'https://github.com.evil.example/owner/repo/releases/tag/v1',
+  'https://github.com/owner/repo',
+  'https://github.com/owner/repo/releases/tag/v1\n--help',
+  'https://github.com/owner/repo/' + 'x'.repeat(600)
+]) {
+  assert.equal(context.releaseUrl(input), '');
+}
 console.log('presentation-links-test: ok');

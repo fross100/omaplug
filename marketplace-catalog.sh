@@ -6,6 +6,7 @@ CATALOG_URL=${1:-https://plugins.omarchy.org/catalog.json}
 
 curl -fsSL --max-time 30 --max-filesize 67108864 "$CATALOG_URL" |
   jq -ce '
+    def s($n): if type == "string" then .[0:$n] else . end;
     if (.plugins | type) != "array" then
       error("catalog.plugins is not an array")
     else
@@ -14,15 +15,15 @@ curl -fsSL --max-time 30 --max-filesize 67108864 "$CATALOG_URL" |
           .plugins[]
           | select((.id | type) == "string" and (.id | length) > 0)
           | ({
-              id,
-              verificationStatus,
-              verificationCommit,
-              verificationSnapshotStatus,
-              verificationCoverage,
-              upstreamObservedCommit,
+              id: (.id | s(128)),
+              verificationStatus: (.verificationStatus | s(64)),
+              verificationCommit: (.verificationCommit | s(64)),
+              verificationSnapshotStatus: (.verificationSnapshotStatus | s(64)),
+              verificationCoverage: (.verificationCoverage | s(64)),
+              upstreamObservedCommit: (.upstreamObservedCommit | s(64)),
               repositoryRelease: (
                 if (.repositoryRelease | type) == "object" then
-                  {url: .repositoryRelease.url}
+                  {url: (.repositoryRelease.url | s(512))}
                 else
                   null
                 end

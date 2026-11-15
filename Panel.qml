@@ -110,8 +110,8 @@ Panel {
   // from the installed commit to the latest observed upstream commit.
   function whatsNewUrlFor(sourceKey, id) {
     var entry = root.marketplaceEntry(String(id))
-    if (entry && typeof entry.releaseUrl === "string" && entry.releaseUrl !== "")
-      return entry.releaseUrl
+    var release = Presentation.releaseUrl(entry && entry.releaseUrl)
+    if (release !== "") return release
     var local = root.pluginCommits[String(sourceKey)] || ""
     var upstream = (entry && typeof entry.upstreamCommit === "string") ? entry.upstreamCommit : ""
     return root.compareUrlFor(sourceKey, local, upstream)
