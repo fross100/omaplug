@@ -318,6 +318,16 @@ def main():
                     return 1
                 print(data["page"])
                 print(json.dumps(data.get("view", {})))
+        elif action == "reopen-pending":
+            # Non-consuming check: a freshly rebuilt widget asks whether the
+            # panel must be loaded now so it can consume the flag itself.
+            with store.lock("reopen.flock"):
+                try:
+                    data = json.loads(store.read("reopen.status"))
+                except FileNotFoundError:
+                    return 1
+                if time.time() - data["time"] > 10:
+                    return 1
         elif action != "read":
             raise ValueError("unknown action")
     return 0

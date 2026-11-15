@@ -62,6 +62,16 @@ class StateSafety(unittest.TestCase):
         self.assertEqual(self.run_helper("python3", state, "reopen-write", "main").returncode, 0)
         self.assertEqual(self.run_helper("python3", state, "reopen-read").stdout.decode().splitlines(), ["main", "{}"])
 
+    def test_reopen_pending_reports_without_consuming(self):
+        state = str(ROOT / "runtime-state.py")
+        self.assertNotEqual(self.run_helper("python3", state, "reopen-pending").returncode, 0)
+        self.assertEqual(self.run_helper("python3", state, "reopen-write", "layout").returncode, 0)
+        self.assertEqual(self.run_helper("python3", state, "reopen-pending").returncode, 0)
+        # Two probes in a row: the panel itself must still be able to consume it.
+        self.assertEqual(self.run_helper("python3", state, "reopen-pending").returncode, 0)
+        self.assertEqual(self.run_helper("python3", state, "reopen-read").stdout.decode().splitlines(), ["layout", "{}"])
+        self.assertNotEqual(self.run_helper("python3", state, "reopen-pending").returncode, 0)
+
     def test_clipboard_paste_is_bounded(self):
         env = self.fake_paste("head -c 1048576 /dev/zero | tr '\\0' 'a'")
         result = self.run_helper("python3", str(ROOT / "runtime-state.py"), "paste", env=env)

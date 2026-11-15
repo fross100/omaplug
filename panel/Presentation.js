@@ -39,6 +39,15 @@ function compareUrl(repoUrl, fromSha, toSha) {
   return url + "/compare/" + from + "..." + to
 }
 
+// Catalog release links are remote input and go straight to the browser, so
+// only https GitHub URLs are eligible.
+function releaseUrl(url) {
+  var value = String(url || "").trim()
+  if (value.length > 512) return ""
+  return /^https:\/\/github\.com\/[A-Za-z0-9][A-Za-z0-9_.-]*\/[A-Za-z0-9][A-Za-z0-9_.-]*\/[^\s"'<>]*$/.test(value)
+    ? value : ""
+}
+
 function kindLabel(kinds, knownKinds) {
   if (!kinds) return ""
   var parts = String(kinds).split(",")
