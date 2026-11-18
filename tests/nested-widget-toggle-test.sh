@@ -50,6 +50,15 @@ check 'remove only requested child before disabling it' jq -se '
         ["plugin","disable","child"]]
 ' "$CALL_LOG"
 
+CONFIG='{"bar":{"layout":{"right":[{"id":"drawer","items":[{"id":"child","label":"x"},{"id":"keep"},"child"]},{"id":"host","widgets":["child"]}]}}}'
+run_helper child disable
+check 'drawer items disable succeeds' test "$result" -eq 0
+check 'remove child from drawer items and widgets before disabling it' jq -se '
+  . == [["bar","set","drawer","items","[{\"id\":\"keep\"}]","--json"],
+        ["bar","set","host","widgets","[]","--json"],
+        ["plugin","disable","child"]]
+' "$CALL_LOG"
+
 CONFIG='{"bar":{"layout":{"left":[{"id":"host","widgets":["other"]}]}}}'
 run_helper standalone disable
 check 'non-nested disable succeeds' test "$result" -eq 0
