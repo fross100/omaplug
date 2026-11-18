@@ -1538,6 +1538,12 @@ Panel {
       for (var i = 0; i < entries.length; i++) {
         var widgets = entries[i] && Array.isArray(entries[i].widgets) ? entries[i].widgets : []
         for (var j = 0; j < widgets.length; j++) nested[String(widgets[j])] = true
+        // Drawer hosts (e.g. Nook) keep children as `items` entries, not `widgets` ids.
+        var items = entries[i] && Array.isArray(entries[i].items) ? entries[i].items : []
+        for (var k = 0; k < items.length; k++) {
+          var itemId = items[k] && typeof items[k] === "object" ? items[k].id : items[k]
+          if (itemId) nested[String(itemId)] = true
+        }
       }
     }
     var folderWidgets = config.bar && config.bar.pluginFolder

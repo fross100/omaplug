@@ -15,14 +15,16 @@ if [[ $action == disable ]]; then
     | if type != "object" then error("invalid layout") else . end
     | [to_entries[] | .value
         | if type != "array" then error("invalid section") else .[] end
-        | select(type == "object")
-        | select((.widgets | type) == "array" and (.widgets | index($id)) != null)
-        | [.id, (.widgets | map(select(. != $id)) | tojson)] | @tsv]
+        | select(type == "object") as $e
+        | ("widgets", "items") as $k
+        | select(($e[$k] | type) == "array"
+            and ($e[$k] | map(if type == "object" then .id else . end) | index($id)) != null)
+        | [$e.id, $k, ($e[$k] | map(select((if type == "object" then .id else . end) != $id)) | tojson | @base64)] | @tsv]
     | join("\n")
   ' <<< "$config")
-  while IFS=$'\t' read -r host widgets; do
+  while IFS=$'\t' read -r host key children; do
     [[ -n $host ]] || continue
-    omarchy bar set "$host" widgets "$widgets" --json
+    omarchy bar set "$host" "$key" "$(base64 -d <<< "$children")" --json
   done <<< "$changes"
   if jq -e --arg id "$id" '
     [((.bar.pluginFolder.widgets // []) | if type == "array" then . else [] end)[]
